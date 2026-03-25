@@ -241,3 +241,4 @@ body {
 .toggle-switch.on { background: var(--g600); }
 .toggle-knob { width: 14px; height: 14px; background: var(--white); border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: left .15s; }
 .toggle-switch.on .toggle-knob { left: 18px; }
+.btn-danger { background: var(--redL); color: var(--red); }
