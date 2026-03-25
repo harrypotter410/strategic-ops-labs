@@ -12,6 +12,9 @@ import Reports from './pages/Reports'
 import Valuations from './pages/Valuations'
 import DataHub from './pages/DataHub'
 import PortfolioMap from './pages/PortfolioMap'
+import Tasks from './pages/Tasks'
+import DebtTracker from './pages/DebtTracker'
+import Contacts from './pages/Contacts'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -35,12 +38,15 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
           <Route path="/map" element={<ProtectedRoute><PortfolioMap /></ProtectedRoute>} />
+          <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
           <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
           <Route path="/financial" element={<ProtectedRoute><Financial /></ProtectedRoute>} />
           <Route path="/kpis" element={<ProtectedRoute><KPIs /></ProtectedRoute>} />
           <Route path="/valuations" element={<ProtectedRoute><Valuations /></ProtectedRoute>} />
+          <Route path="/debt" element={<ProtectedRoute><DebtTracker /></ProtectedRoute>} />
           <Route path="/pipeline" element={<ProtectedRoute><Pipeline /></ProtectedRoute>} />
           <Route path="/intel" element={<ProtectedRoute><Intel /></ProtectedRoute>} />
+          <Route path="/contacts" element={<ProtectedRoute><Contacts /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
           <Route path="/data" element={<ProtectedRoute><DataHub /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
