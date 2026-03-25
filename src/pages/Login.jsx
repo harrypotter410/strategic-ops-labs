@@ -33,8 +33,8 @@ export default function Login() {
             </svg>
           </div>
           <div>
-            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 14, fontWeight: 600, color: '#0d2b1a' }}>Strategic Ops Labs</div>
-            <div style={{ fontSize: 10, color: '#7a817a', letterSpacing: '.08em', textTransform: 'uppercase' }}>Kemmons Wilson Hospitality</div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 14, fontWeight: 600, color: '#0d2b1a' }}>SOUL</div>
+            <div style={{ fontSize: 10, color: '#7a817a', letterSpacing: '.08em', textTransform: 'uppercase' }}>Strategic Ops & Underwriting Lab</div>
           </div>
         </div>
         <div className="login-title">Welcome back</div>

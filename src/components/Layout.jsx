@@ -50,8 +50,8 @@ export default function Layout({ children }) {
         <div className="brand">
           <div className="brand-logo"><Logo /></div>
           <div>
-            <span className="brand-sol">Strategic Ops Labs</span>
-            <span className="brand-kwh">Kemmons Wilson Hospitality</span>
+            <span className="brand-sol">SOUL</span>
+            <span className="brand-kwh">Strategic Ops & Underwriting Lab</span>
           </div>
         </div>
         <div className="topbar-right">
