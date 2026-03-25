@@ -11,14 +11,15 @@ import Intel from './pages/Intel'
 import Reports from './pages/Reports'
 import Valuations from './pages/Valuations'
 import DataHub from './pages/DataHub'
+import PortfolioMap from './pages/PortfolioMap'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0d2b1a' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '0.12em', marginBottom: 6 }}>SOUL</div>
-        <div style={{ fontSize: 11, color: '#a8d5bc', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Loading...</div>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0d2b1a' }}>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ fontFamily:'Playfair Display,serif', fontSize:22, fontWeight:700, color:'#fff', letterSpacing:'0.12em', marginBottom:6 }}>SOUL</div>
+        <div style={{ fontSize:11, color:'#a8d5bc', letterSpacing:'0.15em', textTransform:'uppercase' }}>Loading...</div>
       </div>
     </div>
   )
@@ -33,6 +34,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
+          <Route path="/map" element={<ProtectedRoute><PortfolioMap /></ProtectedRoute>} />
           <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
           <Route path="/financial" element={<ProtectedRoute><Financial /></ProtectedRoute>} />
           <Route path="/kpis" element={<ProtectedRoute><KPIs /></ProtectedRoute>} />
