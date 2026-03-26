@@ -1,119 +1,319 @@
-import { useState } from 'react'
-import { usePortfolioSummary } from '../hooks/useData'
+import { useState, useEffect } from 'react'
+import { useAssets, useDeals } from '../hooks/useData'
+import { supabase } from '../lib/supabase'
+
+const fmtM = (n) => n ? `$${(n/1e6).toFixed(1)}M` : '—'
+const fmtPct = (n) => n ? `${parseFloat(n).toFixed(1)}%` : '—'
 
 const SECTIONS = [
-  { id: 'exec', name: 'Executive summary', meta: '1 page overview' },
-  { id: 'portfolio', name: 'Portfolio snapshot', meta: 'KPIs & asset list' },
-  { id: 'financial', name: 'Financial performance', meta: 'Revenue, NOI, EBITDA' },
-  { id: 'kpis', name: 'Property KPIs', meta: 'Occupancy, ADR, RevPAR' },
-  { id: 'pipeline', name: 'Acquisition pipeline', meta: 'Active deals & scores' },
-  { id: 'intel', name: 'Competitive benchmarking', meta: 'RevPAR index by market' },
-  { id: 'outlook', name: 'Outlook & strategy', meta: 'Q2 priorities' },
+  { id: 'cover', label: 'Cover Page', icon: '📄', required: true, description: 'Title, date, prepared by' },
+  { id: 'portfolio_summary', label: 'Portfolio Summary', icon: '📊', description: 'Total value, gain/loss, YOC, cap rate overview' },
+  { id: 'asset_table', label: 'Asset Table', icon: '🏨', description: 'Full asset list with financials and status' },
+  { id: 'pipeline', label: 'Deal Pipeline', icon: '💼', description: 'Active deals by stage with returns' },
+  { id: 'financials', label: 'Financial Performance', icon: '📈', description: 'P&L by property — NOI, revenue, occupancy' },
+  { id: 'valuations', label: 'Quarterly Valuations', icon: '📉', description: 'Latest valuations and QoQ changes' },
+  { id: 'debt_summary', label: 'Debt Summary', icon: '🏦', description: 'Loan register with maturities and covenant status' },
+  { id: 'kpis', label: 'Operating KPIs', icon: '🎯', description: 'ADR, RevPAR, occupancy, NOI margins by property' },
 ]
 
-const fmt = (n) => n >= 1e9 ? `$${(n/1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n/1e6).toFixed(0)}M` : '—'
+const REPORT_TYPES = [
+  { id: 'investor_update', label: 'Investor Update', defaultSections: ['cover','portfolio_summary','asset_table','pipeline','financials','valuations'] },
+  { id: 'lp_report', label: 'LP Quarterly Report', defaultSections: ['cover','portfolio_summary','asset_table','financials','valuations','debt_summary'] },
+  { id: 'ic_memo', label: 'Investment Committee Memo', defaultSections: ['cover','portfolio_summary','pipeline','kpis'] },
+  { id: 'ops_review', label: 'Operations Review', defaultSections: ['cover','asset_table','financials','kpis','debt_summary'] },
+  { id: 'custom', label: 'Custom Report', defaultSections: ['cover','portfolio_summary'] },
+]
 
 export default function Reports() {
-  const { summary } = usePortfolioSummary()
-  const [title, setTitle] = useState('Q1 2026 Portfolio Report')
-  const [type, setType] = useState('Investor Summary')
-  const [prepared, setPrepared] = useState('Strategic Ops Team')
-  const [date, setDate] = useState('March 2026')
-  const [sections, setSections] = useState({ exec: true, portfolio: true, financial: true, kpis: true, pipeline: false, intel: false, outlook: true })
-  const [preview, setPreview] = useState(false)
+  const { assets } = useAssets()
+  const { deals } = useDeals()
+  const [valuations, setValuations] = useState([])
+  const [debt, setDebt] = useState([])
 
-  const toggle = (id) => setSections(s => ({ ...s, [id]: !s[id] }))
-  const activeSections = SECTIONS.filter(s => sections[s.id])
+  const [reportType, setReportType] = useState('investor_update')
+  const [sections, setSections] = useState(new Set(['cover','portfolio_summary','asset_table','pipeline','financials','valuations']))
+  const [config, setConfig] = useState({
+    title: 'Portfolio Update',
+    period: `Q1 ${new Date().getFullYear()}`,
+    preparedBy: 'Bear Hutchinson',
+    firm: 'Kemmons Wilson Hospitality Partners',
+    confidential: true,
+    includeCharts: true,
+  })
+
+  useEffect(() => {
+    supabase.from('valuations').select('*, assets(name, market)').order('year', { ascending: false }).order('quarter', { ascending: false }).limit(20).then(({ data }) => setValuations(data || []))
+    supabase.from('asset_debt').select('*, assets(name)').order('maturity_date').then(({ data }) => setDebt(data || []))
+  }, [])
+
+  const toggleSection = (id) => {
+    const req = SECTIONS.find(s => s.id === id)?.required
+    if (req) return
+    setSections(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+
+  const applyTemplate = (typeId) => {
+    const t = REPORT_TYPES.find(r => r.id === typeId)
+    if (t) setSections(new Set(t.defaultSections))
+    setReportType(typeId)
+  }
+
+  // Portfolio data
+  const totalVal = assets.reduce((s,a) => s+(a.current_value||0), 0)
+  const totalAcq = assets.reduce((s,a) => s+(a.acquisition_price||0), 0)
+  const totalNOI = assets.reduce((s,a) => s+(a.noi_trailing||0), 0)
+  const unrealizedGain = totalVal - totalAcq
+  const wtdYOC = totalAcq && totalNOI ? ((totalNOI/totalAcq)*100).toFixed(2) : null
+  const activeDeals = deals.filter(d => ['prospecting','loi','due_diligence','closing'].includes(d.stage))
+  const pipelineVal = activeDeals.reduce((s,d) => s+(d.ask_price||0), 0)
+  const latestValuations = Object.values(valuations.reduce((acc, v) => { if (!acc[v.asset_id] || v.year > acc[v.asset_id].year || (v.year === acc[v.asset_id].year && v.quarter > acc[v.asset_id].quarter)) acc[v.asset_id] = v; return acc }, {}))
+
+  const statusColors = { stabilized:'var(--g600)',unstabilized:'var(--amber)',value_add:'var(--blue)',under_renovation:'#7b1fa2',lease_up:'#0288d1',development:'#e65100',held_for_sale:'var(--red)',disposed:'var(--gray500)' }
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>Report Builder</h1>
-        <p>Generate investor-ready portfolio reports</p>
+    <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 20 }}>
+      {/* LEFT: Config panel */}
+      <div>
+        <div className="card">
+          <div className="card-header"><span className="card-title">Report builder</span></div>
+
+          {/* Report type */}
+          <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gray500)', marginBottom: 8 }}>Template</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+            {REPORT_TYPES.map(t => (
+              <button
+                key={t.id}
+                onClick={() => applyTemplate(t.id)}
+                style={{ textAlign: 'left', padding: '8px 12px', borderRadius: 8, border: '1px solid', fontSize: 12, cursor: 'pointer', borderColor: reportType===t.id?'var(--g600)':'var(--gray200)', background: reportType===t.id?'var(--g50)':'var(--white)', color: reportType===t.id?'var(--g800)':'var(--gray700)', fontWeight: reportType===t.id?500:400 }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Section toggles */}
+          <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gray500)', marginBottom: 8 }}>Sections</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+            {SECTIONS.map(s => {
+              const active = sections.has(s.id)
+              return (
+                <div
+                  key={s.id}
+                  onClick={() => toggleSection(s.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, border: '1px solid', cursor: s.required ? 'not-allowed' : 'pointer', borderColor: active?'var(--g400)':'var(--gray200)', background: active?'var(--g50)':'var(--white)', opacity: s.required && active ? 0.7 : 1, transition: 'all .12s' }}
+                >
+                  {/* Toggle pill */}
+                  <div style={{ width: 28, height: 16, borderRadius: 8, background: active?'var(--g600)':'var(--gray200)', position: 'relative', flexShrink: 0, transition: 'background .15s' }}>
+                    <div style={{ position: 'absolute', top: 2, left: active?12:2, width: 12, height: 12, borderRadius: '50%', background: '#fff', transition: 'left .15s' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: active?'var(--g800)':'var(--gray700)' }}>{s.icon} {s.label}</div>
+                    <div style={{ fontSize: 10, color: 'var(--gray500)' }}>{s.description}</div>
+                  </div>
+                  {s.required && <span style={{ fontSize: 9, color: 'var(--gray400)', background: 'var(--gray100)', padding: '1px 5px', borderRadius: 4 }}>required</span>}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Config fields */}
+          <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gray500)', marginBottom: 8 }}>Details</div>
+          <div className="form-group"><label className="form-label">Report Title</label><input className="form-input" value={config.title} onChange={e => setConfig(c => ({...c,title:e.target.value}))}/></div>
+          <div className="form-group"><label className="form-label">Period</label><input className="form-input" value={config.period} onChange={e => setConfig(c => ({...c,period:e.target.value}))}/></div>
+          <div className="form-group"><label className="form-label">Prepared By</label><input className="form-input" value={config.preparedBy} onChange={e => setConfig(c => ({...c,preparedBy:e.target.value}))}/></div>
+          <label style={{ display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer',marginBottom:8 }}>
+            <input type="checkbox" checked={config.confidential} onChange={e => setConfig(c => ({...c,confidential:e.target.checked}))}/>
+            Mark as Confidential
+          </label>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => window.print()}>🖨 Print</button>
+            <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>⬇ Export PDF</button>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--gray500)', marginTop: 8, textAlign: 'center' }}>{sections.size} sections selected</div>
+        </div>
       </div>
 
-      <div className="grid-3-2">
-        <div className="card">
-          <div className="card-header"><span className="card-title">Report configuration</span></div>
+      {/* RIGHT: Report preview */}
+      <div>
+        <div style={{ background: '#fff', border: '1px solid var(--gray100)', borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
 
-          <div className="form-grid-2">
-            <div className="form-group"><label className="form-label">Report title</label><input className="form-input" value={title} onChange={e => setTitle(e.target.value)} /></div>
-            <div className="form-group"><label className="form-label">Report type</label>
-              <select className="form-select" value={type} onChange={e => setType(e.target.value)}>
-                {['Investor Summary', 'Board Deck', 'Asset Review', 'Acquisition Brief', 'Quarterly Ops Report'].map(t => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="form-grid-2">
-            <div className="form-group"><label className="form-label">Prepared by</label><input className="form-input" value={prepared} onChange={e => setPrepared(e.target.value)} /></div>
-            <div className="form-group"><label className="form-label">Date</label><input className="form-input" value={date} onChange={e => setDate(e.target.value)} /></div>
-          </div>
-
-          <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--gray500)', marginBottom: 10 }}>Sections to include</div>
-
-          {SECTIONS.map(s => (
-            <div key={s.id} className="section-toggle">
-              <div>
-                <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--g900)' }}>{s.name}</div>
-                <div style={{ fontSize: 11, color: 'var(--gray500)' }}>{s.meta}</div>
-              </div>
-              <div className={`toggle-switch${sections[s.id] ? ' on' : ''}`} onClick={() => toggle(s.id)}>
-                <div className="toggle-knob" />
-              </div>
-            </div>
-          ))}
-
-          <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 16 }} onClick={() => setPreview(true)}>
-            Generate report preview
-          </button>
-        </div>
-
-        <div>
-          {!preview ? (
-            <div className="empty-state" style={{ padding: '80px 20px' }}>
-              <div className="empty-state-icon">📄</div>
-              <div className="empty-state-title">Configure and generate</div>
-              <div className="empty-state-desc">Set your report options and click generate to preview</div>
-            </div>
-          ) : (
-            <div style={{ background: 'var(--g50)', border: '1px solid var(--g100)', borderRadius: 10, padding: '20px 24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: '2px solid var(--g600)' }}>
-                <div style={{ width: 24, height: 24, background: 'var(--g600)', borderRadius: 4 }} />
-                <div>
-                  <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 600, color: 'var(--g900)' }}>{title}</div>
-                  <div style={{ fontSize: 10, color: 'var(--gray500)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{type} · {prepared} · {date}</div>
-                </div>
-              </div>
-
-              {activeSections.map(s => (
-                <div key={s.id} style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--g600)', marginBottom: 8, paddingBottom: 4, borderBottom: '1px solid var(--g100)' }}>{s.name}</div>
-
-                  {s.id === 'portfolio' && summary && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6 }}>
-                      {[['Total assets', summary.totalAssets], ['Portfolio value', fmt(summary.portfolioValue)], ['Active pipeline', `${summary.pipelineDeals} deals`], ['Active assets', summary.activeAssets]].map(([l, v]) => (
-                        <div key={l} style={{ background: 'var(--white)', border: '1px solid var(--gray100)', borderRadius: 6, padding: '8px 10px' }}>
-                          <div style={{ fontSize: 9, color: 'var(--gray500)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>{l}</div>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--g900)' }}>{v}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {s.id === 'exec' && <div style={{ fontSize: 11, color: 'var(--gray700)', lineHeight: 1.6 }}>Q1 2026 reflects continued portfolio strength across all major metrics. Occupancy softness is offset by ADR growth. Three deals in active pipeline representing significant acquisition opportunity.</div>}
-                  {s.id === 'financial' && <div style={{ fontSize: 11, color: 'var(--gray700)', lineHeight: 1.6 }}>Portfolio revenue of $312M for TTM, up 8.4% YoY. EBITDA margin expanded 180bps to 34.2%. RevPAR of $118 reflects healthy rate growth across full-service assets.</div>}
-                  {s.id === 'kpis' && <div style={{ fontSize: 11, color: 'var(--gray700)', lineHeight: 1.6 }}>Average portfolio occupancy at 73%, ADR of $148, RevPAR of $118. Gulf Shores Resort leads on RevPAR at $167. See property-level detail in appendix.</div>}
-                  {s.id === 'pipeline' && <div style={{ fontSize: 11, color: 'var(--gray700)', lineHeight: 1.6 }}>5 active deals totaling {fmt(summary?.pipelineValue)} in deal volume. Brentwood Mixed-Use expected to close Q2 2026. Chattanooga Boutique advancing through due diligence.</div>}
-                  {s.id === 'intel' && <div style={{ fontSize: 11, color: 'var(--gray700)', lineHeight: 1.6 }}>Portfolio RevPAR Index of 108.4 — above fair share across most markets. Atlanta Hilton Garden underperforming comp set at RGI 91; corrective action underway.</div>}
-                  {s.id === 'outlook' && <div style={{ fontSize: 11, color: 'var(--gray700)', lineHeight: 1.6 }}>Q2 priorities: close Brentwood Mixed-Use, advance Chattanooga to LOI, complete renovation at Brentwood Suites, and launch STR benchmarking program across all select-service assets.</div>}
-                </div>
-              ))}
-
-              <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--g200)', fontSize: 10, color: 'var(--gray500)', display: 'flex', justifyContent: 'space-between' }}>
-                <span>Strategic Ops Labs · Kemmons Wilson Hospitality Partners</span>
-                <span>{date}</span>
-              </div>
+          {/* Cover */}
+          {sections.has('cover') && (
+            <div style={{ background: 'var(--g900)', padding: '40px 48px', borderBottom: '4px solid var(--brass,#c9a96e)' }}>
+              {config.confidential && <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', letterSpacing: '.15em', textTransform: 'uppercase', marginBottom: 24 }}>CONFIDENTIAL — NOT FOR DISTRIBUTION</div>}
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, fontWeight: 600, color: '#fff', marginBottom: 8 }}>{config.title}</div>
+              <div style={{ fontSize: 14, color: 'var(--g200)', marginBottom: 4 }}>{config.period}</div>
+              <div style={{ fontSize: 12, color: 'var(--g400)', marginTop: 24 }}>{config.firm}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>Prepared by {config.preparedBy} · {new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
             </div>
           )}
+
+          <div style={{ padding: '32px 48px' }}>
+
+            {/* Portfolio Summary */}
+            {sections.has('portfolio_summary') && (
+              <div style={{ marginBottom: 36 }}>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 600, color: 'var(--g900)', marginBottom: 4, paddingBottom: 8, borderBottom: '2px solid var(--g900)' }}>Portfolio Summary</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 16 }}>
+                  {[
+                    ['Total Assets', String(assets.length)],
+                    ['Portfolio Value', fmtM(totalVal)],
+                    ['Unrealized Gain', `${unrealizedGain>=0?'+':''}${fmtM(unrealizedGain)}`],
+                    ['Wtd. YOC', wtdYOC?`${wtdYOC}%`:'—'],
+                    ['T12 NOI', fmtM(totalNOI)],
+                    ['Total Rooms', assets.reduce((s,a)=>s+(a.rooms||0),0).toLocaleString()],
+                    ['Pipeline Value', fmtM(pipelineVal)],
+                    ['Active Deals', String(activeDeals.length)],
+                  ].map(([label,value]) => (
+                    <div key={label} style={{ background: 'var(--gray50)', border: '1px solid var(--gray100)', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ fontSize: 9, color: 'var(--gray500)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{label}</div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--g900)', fontFamily: 'Playfair Display, serif' }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Asset Table */}
+            {sections.has('asset_table') && (
+              <div style={{ marginBottom: 36 }}>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 600, color: 'var(--g900)', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--g900)' }}>Asset Portfolio</div>
+                <table className="data-table">
+                  <thead><tr>
+                    <th>Property</th><th>Market</th><th>Rooms</th>
+                    <th>Acq. Price</th><th>Current Value</th><th>Gain/Loss</th>
+                    <th>T12 NOI</th><th>YOC</th><th>Status</th>
+                  </tr></thead>
+                  <tbody>
+                    {assets.map(a => {
+                      const gain = a.current_value && a.acquisition_price ? a.current_value - a.acquisition_price : null
+                      const yoc = a.noi_trailing && a.acquisition_price ? ((a.noi_trailing/a.acquisition_price)*100).toFixed(1) : null
+                      return (
+                        <tr key={a.id}>
+                          <td><strong>{a.name}</strong></td>
+                          <td>{a.market}</td>
+                          <td>{a.rooms?.toLocaleString()}</td>
+                          <td>{fmtM(a.acquisition_price)}</td>
+                          <td>{fmtM(a.current_value)}</td>
+                          <td style={{ color: gain>=0?'var(--g600)':'var(--red)', fontWeight: 500 }}>{gain!==null?`${gain>=0?'+':''}${fmtM(gain)}`:'—'}</td>
+                          <td>{fmtM(a.noi_trailing)}</td>
+                          <td style={{ fontWeight: 500 }}>{yoc?`${yoc}%`:'—'}</td>
+                          <td><span style={{ fontSize: 10, color: statusColors[a.status]||'var(--gray500)', fontWeight: 500 }}>{a.status?.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</span></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pipeline */}
+            {sections.has('pipeline') && (
+              <div style={{ marginBottom: 36 }}>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 600, color: 'var(--g900)', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--g900)' }}>Acquisition Pipeline</div>
+                {activeDeals.length === 0 ? <div style={{ fontSize: 12, color: 'var(--gray500)' }}>No active deals.</div> : (
+                  <table className="data-table">
+                    <thead><tr><th>Deal</th><th>Market</th><th>Stage</th><th>Ask Price</th><th>Cap Rate</th><th>Proj. IRR</th><th>Close Prob.</th></tr></thead>
+                    <tbody>
+                      {activeDeals.map(d => (
+                        <tr key={d.id}>
+                          <td><strong>{d.name}</strong></td>
+                          <td>{d.market||'—'}</td>
+                          <td style={{ fontSize: 10 }}>{d.stage?.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase())}</td>
+                          <td>{fmtM(d.ask_price)}</td>
+                          <td>{d.cap_rate?`${d.cap_rate}%`:'—'}</td>
+                          <td>{d.projected_irr?`${d.projected_irr}%`:'—'}</td>
+                          <td>{d.close_probability?`${d.close_probability}%`:'—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {/* Valuations */}
+            {sections.has('valuations') && latestValuations.length > 0 && (
+              <div style={{ marginBottom: 36 }}>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 600, color: 'var(--g900)', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--g900)' }}>Quarterly Valuations</div>
+                <table className="data-table">
+                  <thead><tr><th>Property</th><th>Period</th><th>Appraised</th><th>Internal Est.</th><th>Equity Value</th><th>Cap Rate</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {latestValuations.map(v => (
+                      <tr key={v.id}>
+                        <td><strong>{v.assets?.name||'—'}</strong></td>
+                        <td>Q{v.quarter} {v.year}</td>
+                        <td>{fmtM(v.appraised_value)}</td>
+                        <td>{fmtM(v.internal_estimate)}</td>
+                        <td style={{ fontWeight: 500 }}>{fmtM(v.equity_value)}</td>
+                        <td>{v.cap_rate_applied?`${v.cap_rate_applied}%`:'—'}</td>
+                        <td style={{ fontSize: 11, color: v.approved?'var(--g600)':'var(--amber)', fontWeight: 500 }}>{v.approved?'Approved':'Draft'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Debt */}
+            {sections.has('debt_summary') && (
+              <div style={{ marginBottom: 36 }}>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 600, color: 'var(--g900)', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--g900)' }}>Debt Summary</div>
+                {debt.length === 0 ? <div style={{ fontSize: 12, color: 'var(--gray500)' }}>No loans tracked.</div> : (
+                  <table className="data-table">
+                    <thead><tr><th>Asset</th><th>Lender</th><th>Balance</th><th>Rate</th><th>Maturity</th><th>Ann. DS</th></tr></thead>
+                    <tbody>
+                      {debt.map(d => (
+                        <tr key={d.id}>
+                          <td><strong>{d.assets?.name||'—'}</strong></td>
+                          <td>{d.lender}</td>
+                          <td style={{ fontWeight: 500 }}>{fmtM(d.current_balance)}</td>
+                          <td>{d.interest_rate?`${d.interest_rate}%`:'—'}</td>
+                          <td>{d.maturity_date?new Date(d.maturity_date).toLocaleDateString('en-US',{month:'short',year:'numeric'}):'—'}</td>
+                          <td>{fmtM(d.debt_service_annual)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {/* KPIs */}
+            {sections.has('kpis') && (
+              <div style={{ marginBottom: 36 }}>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 600, color: 'var(--g900)', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--g900)' }}>Operating KPIs</div>
+                <table className="data-table">
+                  <thead><tr><th>Property</th><th>Rooms</th><th>T12 NOI</th><th>YOC</th><th>Levered YOC</th><th>DS Coverage</th></tr></thead>
+                  <tbody>
+                    {assets.map(a => {
+                      const yoc = a.noi_trailing&&a.acquisition_price ? ((a.noi_trailing/a.acquisition_price)*100).toFixed(2) : null
+                      const lyoc = a.noi_trailing&&a.debt_service_annual&&a.acquisition_price ? (((a.noi_trailing-a.debt_service_annual)/a.acquisition_price)*100).toFixed(2) : null
+                      const dscr = a.noi_trailing&&a.debt_service_annual ? (a.noi_trailing/a.debt_service_annual).toFixed(2) : null
+                      return (
+                        <tr key={a.id}>
+                          <td><strong>{a.name}</strong></td>
+                          <td>{a.rooms?.toLocaleString()||'—'}</td>
+                          <td style={{ fontWeight: 500 }}>{fmtM(a.noi_trailing)}</td>
+                          <td>{yoc?`${yoc}%`:'—'}</td>
+                          <td>{lyoc?`${lyoc}%`:'—'}</td>
+                          <td style={{ color: dscr&&parseFloat(dscr)>=1.25?'var(--g600)':dscr&&parseFloat(dscr)>=1.0?'var(--amber)':'var(--red)', fontWeight: 500 }}>{dscr?`${dscr}x`:'—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div style={{ paddingTop: 20, borderTop: '1px solid var(--gray100)', display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--gray400)' }}>
+              <span>{config.firm}</span>
+              <span>{config.confidential ? 'CONFIDENTIAL' : ''}</span>
+              <span>Generated {new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
