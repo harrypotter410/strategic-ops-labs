@@ -6,16 +6,20 @@ import Overview from './pages/Overview'
 import Assets from './pages/Assets'
 import AssetDetail from './pages/AssetDetail'
 import Financial from './pages/Financial'
+import KPIs from './pages/KPIs'
 import Valuations from './pages/Valuations'
 import Pipeline from './pages/Pipeline'
 import DealDetail from './pages/DealDetail'
 import Intel from './pages/Intel'
+import STRBenchmark from './pages/STRBenchmark'
 import Reports from './pages/Reports'
+import DataHub from './pages/DataHub'
 import PortfolioMap from './pages/PortfolioMap'
 import Tasks from './pages/Tasks'
 import DebtTracker from './pages/DebtTracker'
 import Contacts from './pages/Contacts'
 import IRRDashboard from './pages/IRRDashboard'
+import BudgetVsActual from './pages/BudgetVsActual'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -43,14 +47,18 @@ export default function App() {
           <Route path="/assets" element={<ProtectedRoute><Assets/></ProtectedRoute>}/>
           <Route path="/assets/:id" element={<ProtectedRoute><AssetDetail/></ProtectedRoute>}/>
           <Route path="/financial" element={<ProtectedRoute><Financial/></ProtectedRoute>}/>
+          <Route path="/kpis" element={<ProtectedRoute><KPIs/></ProtectedRoute>}/>
           <Route path="/valuations" element={<ProtectedRoute><Valuations/></ProtectedRoute>}/>
           <Route path="/debt" element={<ProtectedRoute><DebtTracker/></ProtectedRoute>}/>
           <Route path="/irr" element={<ProtectedRoute><IRRDashboard/></ProtectedRoute>}/>
+          <Route path="/budget" element={<ProtectedRoute><BudgetVsActual/></ProtectedRoute>}/>
           <Route path="/pipeline" element={<ProtectedRoute><Pipeline/></ProtectedRoute>}/>
           <Route path="/deals/:id" element={<ProtectedRoute><DealDetail/></ProtectedRoute>}/>
           <Route path="/intel" element={<ProtectedRoute><Intel/></ProtectedRoute>}/>
+          <Route path="/str-benchmark" element={<ProtectedRoute><STRBenchmark/></ProtectedRoute>}/>
           <Route path="/contacts" element={<ProtectedRoute><Contacts/></ProtectedRoute>}/>
           <Route path="/reports" element={<ProtectedRoute><Reports/></ProtectedRoute>}/>
+          <Route path="/data" element={<ProtectedRoute><DataHub/></ProtectedRoute>}/>
           <Route path="*" element={<Navigate to="/" replace/>}/>
         </Routes>
       </BrowserRouter>
