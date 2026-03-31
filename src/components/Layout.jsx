@@ -13,27 +13,26 @@ const Logo = () => (
   </svg>
 )
 
-// Simplified nav — removed Budget vs Actual, STR Benchmark, Data Hub
 const nav = [
   { section: 'Overview', items: [
-    { to: '/', label: 'Portfolio Overview', icon: '⌂' },
-    { to: '/map', label: 'Portfolio Map', icon: '📍' },
-    { to: '/tasks', label: 'Tasks', icon: '✓' },
+    { to: '/', label: 'Portfolio Overview', icon: <Logo /> },
+    { to: '/map', label: 'Portfolio Map', icon: <svg viewBox="0 0 16 16" fill="none"><path d="M8 1C5.24 1 3 3.24 3 6c0 4 5 9 5 9s5-5 5-9c0-2.76-2.24-5-5-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><circle cx="8" cy="6" r="1.5" fill="currentColor"/></svg> },
+    { to: '/tasks', label: 'Tasks', icon: <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M5 7l2 2 4-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
   ]},
   { section: 'Asset Management', items: [
-    { to: '/assets', label: 'Asset Tracker', icon: '🏨' },
-    { to: '/financial', label: 'Performance', icon: '📈' },
-    { to: '/valuations', label: 'Valuations', icon: '📊' },
-    { to: '/debt', label: 'Debt & Covenants', icon: '🏦' },
-    { to: '/irr', label: 'IRR & Exit Analysis', icon: '↗' },
+    { to: '/assets', label: 'Asset Tracker', icon: <svg viewBox="0 0 16 16" fill="none"><path d="M8 1L14 5V11L8 15L2 11V5L8 1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg> },
+    { to: '/financial', label: 'Performance', icon: <svg viewBox="0 0 16 16" fill="none"><polyline points="2,12 6,7 9,9 14,4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+    { to: '/valuations', label: 'Valuations', icon: <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="10" width="2.5" height="4" rx=".5" fill="currentColor"/><rect x="6.5" y="7" width="2.5" height="7" rx=".5" fill="currentColor"/><rect x="11" y="4" width="2.5" height="10" rx=".5" fill="currentColor"/></svg> },
+    { to: '/debt', label: 'Debt & Covenants', icon: <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M1 7h14" stroke="currentColor" strokeWidth="1.5"/><circle cx="5" cy="10.5" r="1" fill="currentColor"/></svg> },
+    { to: '/irr', label: 'IRR & Exit Analysis', icon: <svg viewBox="0 0 16 16" fill="none"><polyline points="2,14 5,9 8,11 14,4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="14" cy="4" r="1.5" fill="currentColor"/></svg> },
   ]},
   { section: 'Deals', items: [
-    { to: '/pipeline', label: 'Acquisition Pipeline', icon: '💼' },
-    { to: '/intel', label: 'Competitive Intel', icon: '🔍' },
-    { to: '/contacts', label: 'Contacts', icon: '👤' },
+    { to: '/pipeline', label: 'Acquisition Pipeline', icon: <svg viewBox="0 0 16 16" fill="none"><path d="M2 14V6L8 2L14 6V14" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><rect x="6" y="9" width="4" height="5" rx=".5" stroke="currentColor" strokeWidth="1.5"/></svg> },
+    { to: '/intel', label: 'Competitive Intel', icon: <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><line x1="5" y1="7" x2="11" y2="7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
+    { to: '/contacts', label: 'Contacts', icon: <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M2 14c0-3.31 2.69-5 6-5s6 1.69 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> },
   ]},
   { section: 'Output', items: [
-    { to: '/reports', label: 'Report Builder', icon: '📄' },
+    { to: '/reports', label: 'Report Builder', icon: <svg viewBox="0 0 16 16" fill="none"><path d="M3 2H10L13 5V14H3V2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M10 2V5H13" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg> },
   ]},
 ]
 
