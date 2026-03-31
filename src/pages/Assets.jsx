@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAssets } from '../hooks/useData'
 import { Link } from 'react-router-dom'
 import { geocodeAddress } from './PortfolioMap'
@@ -31,7 +31,7 @@ function InlineCell({ value, onSave, type='text', format }) {
   return <span className="inline-edit editable-cell" onClick={()=>setEditing(true)} title="Click to edit">{format?format(value):(value||'—')}<span className="edit-pencil">✎</span></span>
 }
 
-// FIX: Full asset modal with ALL fields including exit/hold analysis
+// Full asset modal with ALL fields including exit/hold analysis
 function AssetModal({ asset, onClose, onSave }) {
   const [tab, setTab] = useState('basics')
   const blankForm = {
@@ -226,46 +226,110 @@ function AssetModal({ asset, onClose, onSave }) {
   )
 }
 
+const fmtK = (n) => n != null ? `$${(n/1000).toFixed(0)}K` : '—'
+
 function FinancialsModal({ asset, onClose }) {
   const [form, setForm] = useState({ period_month:new Date().getMonth()+1, period_year:new Date().getFullYear(), revenue:'', gop:'', noi:'', occupancy:'', adr:'', revpar:'' })
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [status, setStatus] = useState(null) // { type: 'success'|'error', msg }
+  const [history, setHistory] = useState([])
+  const [histLoading, setHistLoading] = useState(true)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
   const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
+  // Load history for this asset
+  useEffect(() => {
+    const load = async () => {
+      setHistLoading(true)
+      const { data, error } = await supabase
+        .from('financials')
+        .select('*')
+        .eq('asset_id', asset.id)
+        .order('period_year', { ascending: false })
+        .order('period_month', { ascending: false })
+      if (!error) setHistory(data || [])
+      setHistLoading(false)
+    }
+    load()
+  }, [asset.id])
+
+  // When month/year changes, prefill form with existing entry if present
+  const [selectedPeriod, setSelectedPeriod] = useState({ month: new Date().getMonth()+1, year: new Date().getFullYear() })
+
+  useEffect(() => {
+    const existing = history.find(h => h.period_month === selectedPeriod.month && h.period_year === selectedPeriod.year)
+    if (existing) {
+      setForm(f => ({
+        ...f,
+        period_month: selectedPeriod.month,
+        period_year: selectedPeriod.year,
+        revenue: existing.revenue ?? '',
+        gop: existing.gop ?? '',
+        noi: existing.noi ?? '',
+        occupancy: existing.occupancy ?? '',
+        adr: existing.adr ?? '',
+        revpar: existing.revpar ?? '',
+        budget_revenue: existing.budget_revenue ?? '',
+        budget_noi: existing.budget_noi ?? '',
+      }))
+    } else {
+      setForm(f => ({ ...f, period_month: selectedPeriod.month, period_year: selectedPeriod.year, revenue:'', gop:'', noi:'', occupancy:'', adr:'', revpar:'', budget_revenue:'', budget_noi:'' }))
+    }
+  }, [selectedPeriod, history])
+
   const handleSave = async () => {
     setLoading(true)
-    // FIX: Save to financials table AND update noi_trailing on asset for consistency
-    const { error } = await supabase.from('financials').upsert({
-      asset_id:asset.id,
-      period_month:parseInt(form.period_month),
-      period_year:parseInt(form.period_year),
-      revenue:form.revenue?parseFloat(form.revenue):null,
-      gop:form.gop?parseFloat(form.gop):null,
-      noi:form.noi?parseFloat(form.noi):null,
-      occupancy:form.occupancy?parseFloat(form.occupancy):null,
-      adr:form.adr?parseFloat(form.adr):null,
-      revpar:form.revpar?parseFloat(form.revpar):null,
+    setStatus(null)
+    const { error: upsertErr } = await supabase.from('financials').upsert({
+      asset_id:asset.id, period_month:parseInt(form.period_month), period_year:parseInt(form.period_year),
+      revenue:form.revenue!==''?parseFloat(form.revenue):null, gop:form.gop!==''?parseFloat(form.gop):null,
+      noi:form.noi!==''?parseFloat(form.noi):null, occupancy:form.occupancy!==''?parseFloat(form.occupancy):null,
+      adr:form.adr!==''?parseFloat(form.adr):null, revpar:form.revpar!==''?parseFloat(form.revpar):null,
+      budget_revenue:form.budget_revenue!==''?parseFloat(form.budget_revenue):null,
+      budget_noi:form.budget_noi!==''?parseFloat(form.budget_noi):null,
     }, { onConflict:'asset_id,period_month,period_year' })
-    if (!error) setSuccess(true)
+
+    if (upsertErr) {
+      setStatus({ type:'error', msg: upsertErr.message })
+      setLoading(false)
+      return
+    }
+
+    // Also update trailing NOI on asset if provided
+    if (form.noi !== '') await supabase.from('assets').update({ noi_trailing: parseFloat(form.noi) * 12 }).eq('id', asset.id)
+
+    // Refresh history
+    const { data: refreshed } = await supabase
+      .from('financials')
+      .select('*')
+      .eq('asset_id', asset.id)
+      .order('period_year', { ascending: false })
+      .order('period_month', { ascending: false })
+    setHistory(refreshed || [])
+
+    setStatus({ type:'success', msg:'Saved' })
     setLoading(false)
   }
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal">
-        <div className="modal-header"><span className="modal-title">+ P&L Entry — {asset.name}</span><button className="modal-close" onClick={onClose}>✕</button></div>
-        <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:7,padding:'8px 12px',fontSize:12,color:'var(--g700)',marginBottom:14}}>
-          This saves a monthly record that flows into the Financial Performance page.
-        </div>
-        {success&&<div style={{background:'var(--g100)',color:'var(--g700)',padding:'8px 12px',borderRadius:7,fontSize:12,marginBottom:12}}>✓ Saved — visible on Financial Performance page</div>}
+      <div className="modal" style={{maxWidth:680}}>
+        <div className="modal-header"><span className="modal-title">P&L — {asset.name}</span><button className="modal-close" onClick={onClose}>✕</button></div>
+
+        {status && (
+          <div style={{background:status.type==='success'?'var(--g100)':'var(--redL)',color:status.type==='success'?'var(--g700)':'var(--red)',padding:'8px 12px',borderRadius:7,fontSize:12,marginBottom:12}}>
+            {status.type==='success'?'✓ Saved':'✕ '+status.msg}
+          </div>
+        )}
+
+        {/* Entry form */}
         <div className="form-grid-2">
           <div className="form-group"><label className="form-label">Month</label>
-            <select className="form-select" value={form.period_month} onChange={e=>set('period_month',e.target.value)}>
+            <select className="form-select" value={form.period_month} onChange={e=>setSelectedPeriod(p=>({...p,month:parseInt(e.target.value)}))}>
               {months.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
             </select>
           </div>
-          <div className="form-group"><label className="form-label">Year</label><input className="form-input" type="number" value={form.period_year} onChange={e=>set('period_year',e.target.value)}/></div>
+          <div className="form-group"><label className="form-label">Year</label><input className="form-input" type="number" value={form.period_year} onChange={e=>setSelectedPeriod(p=>({...p,year:parseInt(e.target.value)}))}/></div>
         </div>
         <div className="form-grid-2">
           <div className="form-group"><label className="form-label">Revenue ($)</label><input className="form-input" type="number" value={form.revenue} onChange={e=>set('revenue',e.target.value)}/></div>
@@ -277,9 +341,56 @@ function FinancialsModal({ asset, onClose }) {
           <div className="form-group"><label className="form-label">ADR ($)</label><input className="form-input" type="number" value={form.adr} onChange={e=>set('adr',e.target.value)}/></div>
         </div>
         <div className="form-group"><label className="form-label">RevPAR ($)</label><input className="form-input" type="number" value={form.revpar} onChange={e=>set('revpar',e.target.value)}/></div>
-        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+        <div className="form-grid-2">
+          <div className="form-group"><label className="form-label">Budget Revenue ($)</label><input className="form-input" type="number" value={form.budget_revenue} onChange={e=>set('budget_revenue',e.target.value)}/></div>
+          <div className="form-group"><label className="form-label">Budget NOI ($)</label><input className="form-input" type="number" value={form.budget_noi} onChange={e=>set('budget_noi',e.target.value)}/></div>
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginBottom:20}}>
           <button className="btn btn-secondary" onClick={onClose}>Close</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={loading}>{loading?'Saving...':'Save P&L'}</button>
+        </div>
+
+        {/* History table */}
+        <div style={{borderTop:'1px solid var(--gray200)',paddingTop:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--gray700)',marginBottom:10,textTransform:'uppercase',letterSpacing:'.05em'}}>History</div>
+          {histLoading ? (
+            <div style={{fontSize:12,color:'var(--gray500)'}}>Loading...</div>
+          ) : history.length === 0 ? (
+            <div style={{fontSize:12,color:'var(--gray500)'}}>No entries yet — save your first P&L above.</div>
+          ) : (
+            <div style={{overflowX:'auto'}}>
+              <table className="data-table" style={{fontSize:12}}>
+                <thead><tr>
+                  <th>Period</th>
+                  <th>Revenue</th>
+                  <th>GOP</th>
+                  <th>NOI</th>
+                  <th>Occ %</th>
+                  <th>ADR</th>
+                  <th>RevPAR</th>
+                  <th>Bdgt Rev</th>
+                  <th>Bdgt NOI</th>
+                </tr></thead>
+                <tbody>
+                  {history.map(h => (
+                    <tr key={`${h.period_year}-${h.period_month}`}
+                        style={{cursor:'pointer', background: selectedPeriod.month===h.period_month && selectedPeriod.year===h.period_year ? 'var(--g50)' : undefined}}
+                        onClick={()=>setSelectedPeriod({ month: h.period_month, year: h.period_year })}>
+                      <td style={{fontWeight:600,whiteSpace:'nowrap'}}>{months[h.period_month-1]} {h.period_year}</td>
+                      <td>{fmtK(h.revenue)}</td>
+                      <td>{fmtK(h.gop)}</td>
+                      <td style={{fontWeight:500,color:'var(--g700)'}}>{fmtK(h.noi)}</td>
+                      <td>{h.occupancy != null ? `${parseFloat(h.occupancy).toFixed(1)}%` : '—'}</td>
+                      <td>{h.adr != null ? `$${parseFloat(h.adr).toFixed(0)}` : '—'}</td>
+                      <td>{h.revpar != null ? `$${parseFloat(h.revpar).toFixed(0)}` : '—'}</td>
+                      <td>{fmtK(h.budget_revenue)}</td>
+                      <td>{fmtK(h.budget_noi)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
