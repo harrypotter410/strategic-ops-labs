@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { supabase } from '../lib/supabase'
 import { useAssets, useDeals } from '../hooks/useData'
 import { Link } from 'react-router-dom'
 
@@ -40,104 +39,9 @@ const SCORE_RULES = [
   { factor:'IRR < 10%', condition:'projected_irr < 10', points:'−10' },
 ]
 
-// Edit modal for a single asset's IRR inputs
-function AssetIRREditModal({ asset, onClose, onSave }) {
-  const [form, setForm] = useState({
-    year_acquired: asset.year_acquired||'',
-    noi_trailing: asset.noi_trailing||'',
-    debt_service_annual: asset.debt_service_annual||'',
-    acquisition_price: asset.acquisition_price||'',
-    current_value: asset.current_value||'',
-    hold_period_years: asset.hold_period_years||'',
-    target_exit_year: asset.target_exit_year||'',
-    target_exit_cap_rate: asset.target_exit_cap_rate||'',
-    projected_exit_value: asset.projected_exit_value||'',
-    actual_irr: asset.actual_irr||'',
-  })
-  const [loading, setLoading] = useState(false)
-  const set = (k,v) => setForm(f=>({...f,[k]:v}))
-
-  // Live IRR preview
-  const holdYears = form.target_exit_year&&form.year_acquired ? parseInt(form.target_exit_year)-parseInt(form.year_acquired) : parseInt(form.hold_period_years)||null
-  const annualCF = (parseFloat(form.noi_trailing)||0) - (parseFloat(form.debt_service_annual)||0)
-  const liveIRR = calcIRR(parseFloat(form.acquisition_price)||null, parseFloat(form.projected_exit_value)||null, holdYears, annualCF)
-  const equityMultiple = form.projected_exit_value&&form.acquisition_price ? (parseFloat(form.projected_exit_value)/parseFloat(form.acquisition_price)).toFixed(2) : null
-  const yoc = form.noi_trailing&&form.acquisition_price ? ((parseFloat(form.noi_trailing)/parseFloat(form.acquisition_price))*100).toFixed(2) : null
-
-  const handleSave = async () => {
-    setLoading(true)
-    await onSave(asset.id, {
-      year_acquired:form.year_acquired?parseInt(form.year_acquired):null,
-      noi_trailing:form.noi_trailing?parseFloat(form.noi_trailing):null,
-      debt_service_annual:form.debt_service_annual?parseFloat(form.debt_service_annual):null,
-      acquisition_price:form.acquisition_price?parseFloat(form.acquisition_price):null,
-      current_value:form.current_value?parseFloat(form.current_value):null,
-      hold_period_years:form.hold_period_years?parseInt(form.hold_period_years):null,
-      target_exit_year:form.target_exit_year?parseInt(form.target_exit_year):null,
-      target_exit_cap_rate:form.target_exit_cap_rate?parseFloat(form.target_exit_cap_rate):null,
-      projected_exit_value:form.projected_exit_value?parseFloat(form.projected_exit_value):null,
-      actual_irr:form.actual_irr?parseFloat(form.actual_irr):null,
-    })
-    setLoading(false); onClose()
-  }
-
-  return (
-    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="modal" style={{width:540}}>
-        <div className="modal-header"><span className="modal-title">Edit IRR Inputs — {asset.name}</span><button className="modal-close" onClick={onClose}>✕</button></div>
-
-        <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:11,color:'var(--g700)'}}>
-          <strong>How IRR is calculated here:</strong><br/>
-          Projected IRR = discount rate where NPV of (annual cash flows + exit proceeds) equals acquisition price.<br/>
-          Cash flow = NOI − Debt Service each year. Exit = Projected Exit Value.
-        </div>
-
-        <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--g600)',marginBottom:8}}>Acquisition</div>
-        <div className="form-grid-2">
-          <div className="form-group"><label className="form-label">Year Acquired</label><input className="form-input" type="number" value={form.year_acquired} onChange={e=>set('year_acquired',e.target.value)} placeholder="2018"/></div>
-          <div className="form-group"><label className="form-label">Acquisition Price ($)</label><input className="form-input" type="number" value={form.acquisition_price} onChange={e=>set('acquisition_price',e.target.value)}/></div>
-        </div>
-        <div className="form-grid-2">
-          <div className="form-group"><label className="form-label">Trailing NOI ($) <span style={{fontSize:9,color:'var(--gray400)'}}>Used as annual CF</span></label><input className="form-input" type="number" value={form.noi_trailing} onChange={e=>set('noi_trailing',e.target.value)}/></div>
-          <div className="form-group"><label className="form-label">Annual Debt Service ($)</label><input className="form-input" type="number" value={form.debt_service_annual} onChange={e=>set('debt_service_annual',e.target.value)}/></div>
-        </div>
-
-        <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--g600)',margin:'12px 0 8px'}}>Exit Assumptions</div>
-        <div className="form-grid-2">
-          <div className="form-group"><label className="form-label">Target Exit Year</label><input className="form-input" type="number" value={form.target_exit_year} onChange={e=>set('target_exit_year',e.target.value)} placeholder="2027"/></div>
-          <div className="form-group"><label className="form-label">Hold Period (years) <span style={{fontSize:9,color:'var(--gray400)'}}>Auto-calc if both dates set</span></label><input className="form-input" type="number" value={form.hold_period_years} onChange={e=>set('hold_period_years',e.target.value)}/></div>
-        </div>
-        <div className="form-grid-2">
-          <div className="form-group"><label className="form-label">Target Exit Cap Rate (%)</label><input className="form-input" type="number" step="0.1" value={form.target_exit_cap_rate} onChange={e=>set('target_exit_cap_rate',e.target.value)} placeholder="6.0"/></div>
-          <div className="form-group"><label className="form-label">Projected Exit Value ($)</label><input className="form-input" type="number" value={form.projected_exit_value} onChange={e=>set('projected_exit_value',e.target.value)}/></div>
-        </div>
-
-        {/* Live IRR preview */}
-        {(liveIRR||equityMultiple)&&(
-          <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:8,padding:'10px 14px',display:'flex',gap:20,marginBottom:12}}>
-            {holdYears&&<div><div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:3}}>Hold Period</div><div style={{fontSize:14,fontWeight:600,color:'var(--g900)'}}>{holdYears} yrs</div></div>}
-            {liveIRR&&<div><div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:3}}>Projected IRR</div><div style={{fontSize:18,fontWeight:700,color:liveIRR>=15?'var(--g600)':liveIRR>=12?'var(--amber)':'var(--red)'}}>{liveIRR}%</div><div style={{fontSize:9,color:'var(--gray400)'}}>Auto-calculated</div></div>}
-            {equityMultiple&&<div><div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:3}}>Equity Multiple</div><div style={{fontSize:14,fontWeight:600,color:'var(--g900)'}}>{equityMultiple}x</div></div>}
-            {yoc&&<div><div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:3}}>YOC (Unlev.)</div><div style={{fontSize:14,fontWeight:600,color:'var(--g900)'}}>{yoc}%</div></div>}
-          </div>
-        )}
-
-        <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--g600)',margin:'4px 0 8px'}}>Actual (if disposed)</div>
-        <div className="form-group"><label className="form-label">Actual Realized IRR (%) — enter from your model</label><input className="form-input" type="number" step="0.1" value={form.actual_irr} onChange={e=>set('actual_irr',e.target.value)} placeholder="16.4"/></div>
-
-        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={loading}>{loading?'Saving...':'Save Changes'}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function IRRDashboard() {
-  const { assets, updateAsset } = useAssets()
+  const { assets } = useAssets()
   const { deals } = useDeals()
-  const [editModal, setEditModal] = useState(null)
   const [showCalcExplainer, setShowCalcExplainer] = useState(false)
   const [showScoreExplainer, setShowScoreExplainer] = useState(false)
 
@@ -166,10 +70,6 @@ export default function IRRDashboard() {
     'YOC':a.yoc,
   }))
 
-  const handleSaveAsset = async (id, data) => {
-    await updateAsset(id, data)
-  }
-
   return (
     <div>
       <div className="page-header">
@@ -194,7 +94,7 @@ export default function IRRDashboard() {
               <div>• <strong>YOC</strong> = Trailing NOI ÷ Acquisition Price (unlevered)</div>
             </div>
             <div style={{marginTop:8,padding:'8px 12px',background:'var(--g100)',borderRadius:7,fontSize:11}}>
-              ✏️ <strong>To update IRR inputs</strong>: Click the "Edit" button on any asset row below, or use the Edit button on the Asset Tracker. Fill in Year Acquired, Trailing NOI, Debt Service, Target Exit Year, and Projected Exit Value.
+              ✏️ <strong>To update IRR inputs</strong>: Click any asset name to open its detail page, then go to the "Exit & Returns" tab. Fill in Year Acquired, Trailing NOI, Debt Service, Target Exit Year, and Projected Exit Value.
             </div>
           </div>
         )}
@@ -256,11 +156,11 @@ export default function IRRDashboard() {
         </div>
       )}
 
-      {/* Full asset IRR table with edit button */}
+      {/* Full asset IRR table — read-only, link to detail page to edit */}
       <div className="card">
         <div className="card-header">
           <span className="card-title">Asset return summary</span>
-          <span style={{fontSize:11,color:'var(--gray500)'}}>Click Edit to update IRR inputs for any asset</span>
+          <span style={{fontSize:11,color:'var(--gray500)'}}>Open an asset to update IRR inputs on its detail page</span>
         </div>
         <div style={{overflowX:'auto'}}>
           <table className="data-table">
@@ -271,7 +171,7 @@ export default function IRRDashboard() {
               <th>YOC</th>
               <th title="Calculated from: Acq Price, Proj Exit Value, Hold Years, NOI−DS as annual CF">Proj. IRR ⓘ</th>
               <th>Target Exit</th><th>Yrs to Exit</th>
-              <th>Proj. Exit Value</th><th>Edit</th>
+              <th>Proj. Exit Value</th>
             </tr></thead>
             <tbody>
               {assetIRR.map(a=>(
@@ -285,21 +185,20 @@ export default function IRRDashboard() {
                   <td style={{fontWeight:500}}>{a.equityMultiple?`${a.equityMultiple}x`:'—'}</td>
                   <td>{a.yoc?`${a.yoc}%`:'—'}</td>
                   <td style={{fontWeight:600,color:a.projIRR?(a.projIRR>=15?'var(--g600)':a.projIRR>=12?'var(--amber)':'var(--red)'):'var(--gray400)'}}>
-                    {a.projIRR?`${a.projIRR}%`:<span style={{fontSize:10,color:'var(--gray400)'}}>Need data</span>}
+                    {a.projIRR?`${a.projIRR}%`:<Link to={`/assets/${a.id}`} style={{fontSize:10,color:'var(--g600)',textDecoration:'none'}}>Add data →</Link>}
                   </td>
                   <td style={{color:a.yearsToExit!==null&&a.yearsToExit<=0?'var(--red)':a.yearsToExit!==null&&a.yearsToExit<=2?'var(--amber)':'var(--gray700)'}}>{a.target_exit_year||'—'}</td>
                   <td style={{color:a.yearsToExit!==null&&a.yearsToExit<0?'var(--red)':a.yearsToExit!==null&&a.yearsToExit<=2?'var(--amber)':'var(--gray700)',fontWeight:a.yearsToExit!==null&&a.yearsToExit<=2?500:400}}>
                     {a.yearsToExit!==null?(a.yearsToExit<0?`${Math.abs(a.yearsToExit)}y past`:`${a.yearsToExit}y`):'—'}
                   </td>
                   <td>{fmtM(a.projected_exit_value)}</td>
-                  <td><button className="card-action" onClick={()=>setEditModal(a)}>Edit ✎</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <div style={{fontSize:11,color:'var(--gray500)',marginTop:8}}>
-          "Proj. IRR" is auto-calculated. "Need data" means one or more of: Acquisition Price, Projected Exit Value, or Year Acquired is missing. Click Edit to fill in.
+          "Proj. IRR" is auto-calculated. Click "Add data →" or the asset name to open its detail page and fill in exit assumptions.
         </div>
       </div>
 
@@ -327,7 +226,6 @@ export default function IRRDashboard() {
         </div>
       )}
 
-      {editModal&&<AssetIRREditModal asset={editModal} onClose={()=>setEditModal(null)} onSave={handleSaveAsset}/>}
     </div>
   )
 }
