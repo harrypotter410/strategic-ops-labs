@@ -85,8 +85,10 @@ function DebtModal({ debt, assets, onClose, onSave }) {
     if (!form.lender.trim()) { setError('Lender is required'); return }
     if (!form.asset_id) { setError('Asset is required'); return }
     setLoading(true)
+    // Strip joined/non-column fields before sending to Supabase
+    const { assets: _assets, created_at: _ca, ...formClean } = form
     const payload = {
-      ...form,
+      ...formClean,
       original_balance:form.original_balance?parseFloat(form.original_balance):null,
       current_balance:form.current_balance?parseFloat(form.current_balance):null,
       interest_rate:form.interest_rate?parseFloat(form.interest_rate):null,
