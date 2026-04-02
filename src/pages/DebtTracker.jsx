@@ -38,7 +38,7 @@ function useDebt() {
 
   const fetch = async () => {
     setLoading(true)
-    const { data } = await supabase.from('asset_debt').select('*, assets(name, market, current_value, noi_trailing)').order('maturity_date',{ascending:true})
+    const { data } = await supabase.from('asset_debt').select('*').order('maturity_date',{ascending:true})
     setDebt(data||[])
     setLoading(false)
   }
@@ -46,11 +46,11 @@ function useDebt() {
 
   const save = async (d) => {
     if (d.id) {
-      const { data, error } = await supabase.from('asset_debt').update(d).eq('id',d.id).select('*, assets(name, market, current_value, noi_trailing)').single()
+      const { data, error } = await supabase.from('asset_debt').update(d).eq('id',d.id).select('*').single()
       if (!error) setDebt(prev=>prev.map(x=>x.id===d.id?data:x))
       return { data, error }
     } else {
-      const { data, error } = await supabase.from('asset_debt').insert(d).select('*, assets(name, market, current_value, noi_trailing)').single()
+      const { data, error } = await supabase.from('asset_debt').insert(d).select('*').single()
       if (!error) setDebt(prev=>[...prev,data])
       return { data, error }
     }
@@ -246,13 +246,13 @@ export default function DebtTracker() {
       {allBreaches.map(({loan,cov})=>(
         <div key={`${loan.id}-${cov.key}`} style={{background:'var(--redL)',border:'1px solid #f5c6c2',borderRadius:10,padding:'12px 16px',fontSize:12,marginBottom:8}}>
           <strong style={{color:'var(--red)'}}>🚨 COVENANT BREACH</strong>
-          <span style={{color:'var(--red)',marginLeft:8}}>{loan.assets?.name} — {cov.fullName}: {cov.format(loan[cov.actualField])} vs required {cov.type==='min'?'min':'max'} of {cov.format(loan[cov.minField])}</span>
+          <span style={{color:'var(--red)',marginLeft:8}}>{assets.find(a=>a.id===loan.asset_id)?.name} — {cov.fullName}: {cov.format(loan[cov.actualField])} vs required {cov.type==='min'?'min':'max'} of {cov.format(loan[cov.minField])}</span>
         </div>
       ))}
       {allWarnings.map(({loan,cov})=>(
         <div key={`${loan.id}-${cov.key}`} style={{background:'var(--amberL)',border:'1px solid #ffe082',borderRadius:10,padding:'12px 16px',fontSize:12,marginBottom:8}}>
           <strong style={{color:'var(--amber)'}}>⚠ Warning</strong>
-          <span style={{color:'#7a5500',marginLeft:8}}>{loan.assets?.name} — {cov.fullName}: {cov.format(loan[cov.actualField])} approaching limit of {cov.format(loan[cov.minField])}</span>
+          <span style={{color:'#7a5500',marginLeft:8}}>{assets.find(a=>a.id===loan.asset_id)?.name} — {cov.fullName}: {cov.format(loan[cov.actualField])} approaching limit of {cov.format(loan[cov.minField])}</span>
         </div>
       ))}
 
@@ -289,8 +289,8 @@ export default function DebtTracker() {
                 <div key={d.id} style={{borderBottom:'1px solid var(--gray100)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 0',cursor:'pointer'}} onClick={()=>setExpandedId(isExpanded?null:d.id)}>
                     <div style={{flex:1.5}}>
-                      <div style={{fontSize:12.5,fontWeight:500,color:'var(--g900)'}}>{d.assets?.name||'—'}</div>
-                      <div style={{fontSize:10,color:'var(--gray500)'}}>{d.assets?.market}</div>
+                      <div style={{fontSize:12.5,fontWeight:500,color:'var(--g900)'}}>{assets.find(a=>a.id===d.asset_id)?.name||'—'}</div>
+                      <div style={{fontSize:10,color:'var(--gray500)'}}>{assets.find(a=>a.id===d.asset_id)?.market}</div>
                     </div>
                     <div style={{flex:1,fontSize:12,color:'var(--gray700)'}}>{d.lender}</div>
                     <div style={{flex:0.7}}><span style={{fontSize:10,background:'var(--g50)',color:'var(--g700)',padding:'2px 7px',borderRadius:10}}>{d.loan_type?.replace('_',' ')}</span></div>
