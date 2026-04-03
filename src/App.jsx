@@ -20,6 +20,7 @@ import DebtTracker from './pages/DebtTracker'
 import Contacts from './pages/Contacts'
 import IRRDashboard from './pages/IRRDashboard'
 import BudgetVsActual from './pages/BudgetVsActual'
+import KeyDates from './pages/KeyDates'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/debt" element={<ProtectedRoute><DebtTracker/></ProtectedRoute>}/>
           <Route path="/irr" element={<ProtectedRoute><IRRDashboard/></ProtectedRoute>}/>
           <Route path="/budget" element={<ProtectedRoute><BudgetVsActual/></ProtectedRoute>}/>
+          <Route path="/key-dates" element={<ProtectedRoute><KeyDates/></ProtectedRoute>}/>
           <Route path="/pipeline" element={<ProtectedRoute><Pipeline/></ProtectedRoute>}/>
           <Route path="/deals/:id" element={<ProtectedRoute><DealDetail/></ProtectedRoute>}/>
           <Route path="/intel" element={<ProtectedRoute><Intel/></ProtectedRoute>}/>

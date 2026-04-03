@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 const fmtM = (n) => n ? `$${(n/1e6).toFixed(2)}M` : '—'
 const fmtPct = (n) => n ? `${parseFloat(n).toFixed(2)}%` : '—'
@@ -18,6 +18,9 @@ const STATUSES = [
   { value:'held_for_sale', label:'Held for Sale', color:'var(--red)', bg:'var(--redL)' },
   { value:'disposed', label:'Disposed', color:'var(--gray500)', bg:'var(--gray100)' },
 ]
+
+const CAPEX_CATEGORIES = ['FF&E','Soft Goods','Infrastructure','PIP','Technology','Other']
+const ROOM_TYPE_OPTIONS = ['King','Double/Double','Suite','Accessible','Studio','Other']
 
 function calcIRR(acqPrice, exitValue, holdYears, annualCF=0) {
   if (!acqPrice||!exitValue||!holdYears||holdYears<=0||acqPrice<=0||exitValue<=0) return null
@@ -88,12 +91,20 @@ const indexColor = (v) => {
   return n>=105?'var(--g600)':n>=95?'var(--amber)':'var(--red)'
 }
 
+const fmtDate = (d) => {
+  if (!d) return '—'
+  const dt = new Date(d + 'T00:00:00')
+  return dt.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+}
+
 export default function AssetDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [asset, setAsset] = useState(null)
   const [financials, setFinancials] = useState([])
   const [compData, setCompData] = useState([])
+  const [capex, setCapex] = useState([])
+  const [roomTypes, setRoomTypes] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('overview')
   const [saving, setSaving] = useState(false)
@@ -113,6 +124,16 @@ export default function AssetDetail() {
   const [intelSaving, setIntelSaving] = useState(false)
   const [intelStatus, setIntelStatus] = useState(null)
 
+  // ── CapEx form state ──
+  const [capexForm, setCapexForm] = useState({ year: currentYear, category:'FF&E', amount:'', brand_required:false, description:'' })
+  const [capexSaving, setCapexSaving] = useState(false)
+  const [capexStatus, setCapexStatus] = useState(null)
+
+  // ── Room type form state ──
+  const [roomForm, setRoomForm] = useState({ room_type:'King', count:'', rate_premium:'', notes:'' })
+  const [roomSaving, setRoomSaving] = useState(false)
+  const [roomStatus, setRoomStatus] = useState(null)
+
   // ── Initial load ──
   useEffect(() => {
     if (!id) return
@@ -121,11 +142,15 @@ export default function AssetDetail() {
       supabase.from('assets').select('*').eq('id', id).single(),
       supabase.from('financials').select('*').eq('asset_id', id).order('period_year').order('period_month'),
       supabase.from('comp_data').select('*').eq('asset_id', id).order('period_year',{ascending:false}).order('period_month',{ascending:false}),
-    ]).then(([a, f, c]) => {
+      supabase.from('asset_capex').select('*').eq('asset_id', id).order('year',{ascending:false}),
+      supabase.from('room_types').select('*').eq('asset_id', id).order('room_type'),
+    ]).then(([a, f, c, cx, rt]) => {
       if (a.error || !a.data) { navigate('/assets'); return }
       setAsset(a.data)
       setFinancials(f.data||[])
       setCompData(c.data||[])
+      setCapex(cx.data||[])
+      setRoomTypes(rt.data||[])
       setLoading(false)
     })
   }, [id])
@@ -168,8 +193,16 @@ export default function AssetDetail() {
 
   // ── Field updater for asset record ──
   const updateField = async (field, rawVal) => {
-    const numFields = ['acquisition_price','current_value','noi_trailing','debt_service_annual','cap_rate','rooms','year_acquired','year_built','hold_period_years','target_exit_year','target_exit_cap_rate','projected_exit_value','actual_irr','actual_exit_value']
-    const val = numFields.includes(field) ? (rawVal?parseFloat(rawVal):null) : rawVal||null
+    const numFields = ['acquisition_price','current_value','noi_trailing','debt_service_annual','cap_rate','rooms','year_acquired','year_built','hold_period_years','target_exit_year','target_exit_cap_rate','projected_exit_value','actual_irr','actual_exit_value','franchise_fee_pct','pip_cost_estimate','key_money_received','management_fee_pct','ground_lease_annual_rent','uw_purchase_price','uw_noi','uw_occupancy','uw_adr','uw_exit_cap_rate']
+    const boolFields = ['land_owned']
+    let val
+    if (boolFields.includes(field)) {
+      val = rawVal === 'true' || rawVal === true
+    } else if (numFields.includes(field)) {
+      val = rawVal ? parseFloat(rawVal) : null
+    } else {
+      val = rawVal || null
+    }
     setSaving(true)
     const { data, error } = await supabase.from('assets').update({[field]:val}).eq('id',id).select().single()
     if (!error && data) setAsset(data)
@@ -253,6 +286,61 @@ export default function AssetDetail() {
     setIntelSaving(false)
   }
 
+  // ── Save CapEx entry ──
+  const saveCapex = async () => {
+    if (!capexForm.amount) { setCapexStatus({ type:'error', msg:'Amount is required' }); return }
+    setCapexSaving(true)
+    setCapexStatus(null)
+    const { error } = await supabase.from('asset_capex').insert({
+      asset_id: id,
+      year: parseInt(capexForm.year) || currentYear,
+      category: capexForm.category,
+      amount: parseFloat(capexForm.amount),
+      brand_required: capexForm.brand_required,
+      description: capexForm.description || null,
+    })
+    if (error) { setCapexStatus({ type:'error', msg: error.message }); setCapexSaving(false); return }
+    const { data: refreshed } = await supabase.from('asset_capex').select('*').eq('asset_id', id).order('year',{ascending:false})
+    setCapex(refreshed || [])
+    setCapexForm({ year: currentYear, category:'FF&E', amount:'', brand_required:false, description:'' })
+    setCapexStatus({ type:'success', msg:'Saved' })
+    setCapexSaving(false)
+  }
+
+  // ── Delete CapEx entry ──
+  const deleteCapex = async (cxId) => {
+    const { error } = await supabase.from('asset_capex').delete().eq('id', cxId)
+    if (error) { setCapexStatus({ type:'error', msg: error.message }); return }
+    setCapex(prev => prev.filter(c => c.id !== cxId))
+  }
+
+  // ── Save Room Type ──
+  const saveRoomType = async () => {
+    if (!roomForm.count) { setRoomStatus({ type:'error', msg:'Count is required' }); return }
+    setRoomSaving(true)
+    setRoomStatus(null)
+    const { error } = await supabase.from('room_types').insert({
+      asset_id: id,
+      room_type: roomForm.room_type,
+      count: parseInt(roomForm.count),
+      rate_premium: roomForm.rate_premium ? parseFloat(roomForm.rate_premium) : null,
+      notes: roomForm.notes || null,
+    })
+    if (error) { setRoomStatus({ type:'error', msg: error.message }); setRoomSaving(false); return }
+    const { data: refreshed } = await supabase.from('room_types').select('*').eq('asset_id', id).order('room_type')
+    setRoomTypes(refreshed || [])
+    setRoomForm({ room_type:'King', count:'', rate_premium:'', notes:'' })
+    setRoomStatus({ type:'success', msg:'Saved' })
+    setRoomSaving(false)
+  }
+
+  // ── Delete Room Type ──
+  const deleteRoomType = async (rtId) => {
+    const { error } = await supabase.from('room_types').delete().eq('id', rtId)
+    if (error) { setRoomStatus({ type:'error', msg: error.message }); return }
+    setRoomTypes(prev => prev.filter(r => r.id !== rtId))
+  }
+
   if (loading) return <div className="loading">Loading asset...</div>
   if (!asset) return null
 
@@ -277,6 +365,7 @@ export default function AssetDetail() {
   }))
 
   const latestComp = compData[0]
+  const latestFinancial = financials.length > 0 ? financials[financials.length - 1] : null
 
   const tabStyle = (t) => ({
     fontSize:13,padding:'7px 18px',borderRadius:20,border:'1px solid',cursor:'pointer',
@@ -288,6 +377,31 @@ export default function AssetDetail() {
   })
 
   const statusOptions = STATUSES.map(s=>({ value:s.value, label:s.label }))
+
+  // ── Ground lease warning ──
+  const groundLeaseExpiry = asset.ground_lease_expiry ? new Date(asset.ground_lease_expiry + 'T00:00:00') : null
+  const groundLeaseYearsLeft = groundLeaseExpiry ? ((groundLeaseExpiry - new Date()) / (1000*60*60*24*365.25)) : null
+  const groundLeaseWarning = groundLeaseYearsLeft !== null && groundLeaseYearsLeft <= 10
+
+  // ── CapEx derived ──
+  const totalCapex = capex.reduce((s,c) => s + (parseFloat(c.amount)||0), 0)
+  const brandRequiredCapex = capex.filter(c=>c.brand_required).reduce((s,c) => s + (parseFloat(c.amount)||0), 0)
+  const electiveCapex = totalCapex - brandRequiredCapex
+  const pipCapex = capex.filter(c=>c.category==='PIP').reduce((s,c) => s + (parseFloat(c.amount)||0), 0)
+
+  // ── CapEx chart data ──
+  const capexYears = [...new Set(capex.map(c=>c.year))].sort()
+  const capexChartData = capexYears.map(yr => {
+    const yearItems = capex.filter(c=>c.year===yr)
+    return {
+      year: yr,
+      brandRequired: yearItems.filter(c=>c.brand_required).reduce((s,c) => s + (parseFloat(c.amount)||0), 0),
+      elective: yearItems.filter(c=>!c.brand_required).reduce((s,c) => s + (parseFloat(c.amount)||0), 0),
+    }
+  })
+
+  // ── Room type totals ──
+  const totalRoomTypesCount = roomTypes.reduce((s,r) => s + (parseInt(r.count)||0), 0)
 
   return (
     <div>
@@ -315,7 +429,7 @@ export default function AssetDetail() {
 
       {/* ── Tabs ── */}
       <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
-        {[['overview','Overview'],['exit','Exit & Returns'],['pnl','Monthly P&L'],['intel','STR Intel']].map(([t,l])=>(
+        {[['overview','Overview'],['exit','Exit & Returns'],['pnl','Monthly P&L'],['intel','STR Intel'],['hotel','Hotel Profile'],['capex','CapEx & PIP']].map(([t,l])=>(
           <button key={t} style={tabStyle(t)} onClick={()=>setTab(t)}>{l}</button>
         ))}
       </div>
@@ -332,8 +446,8 @@ export default function AssetDetail() {
               sub={gain!==null?`${gain>=0?'+':''}${fmtM(gain)} (${gain>=0?'+':''}${gainPct}%)`:'Click pencil to update'}
               color={gain>0?'var(--g600)':gain<0?'var(--red)':undefined}
             />
-            <KPICard label="Unlevered YOC" value={yoc?`${yoc}%`:null} sub="NOI ÷ Acq. Price"/>
-            <KPICard label="DSCR" value={dscr?`${dscr}x`:null} sub="NOI ÷ Debt Service" color={dscr?(parseFloat(dscr)>=1.25?'var(--g600)':parseFloat(dscr)>=1?'var(--amber)':'var(--red)'):undefined}/>
+            <KPICard label="Unlevered YOC" value={yoc?`${yoc}%`:null} sub="NOI / Acq. Price"/>
+            <KPICard label="DSCR" value={dscr?`${dscr}x`:null} sub="NOI / Debt Service" color={dscr?(parseFloat(dscr)>=1.25?'var(--g600)':parseFloat(dscr)>=1?'var(--amber)':'var(--red)'):undefined}/>
           </div>
 
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
@@ -389,64 +503,165 @@ export default function AssetDetail() {
 
       {/* ══ EXIT & RETURNS TAB ══ */}
       {tab==='exit'&&(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
-          {/* Exit assumptions — inline edit */}
-          <div className="card" style={{marginBottom:0}}>
-            <div className="card-header">
-              <span className="card-title">Exit assumptions</span>
-              <span style={{fontSize:10,color:'var(--gray500)'}}>Click any value to edit</span>
+        <div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+            {/* Exit assumptions — inline edit */}
+            <div className="card" style={{marginBottom:0}}>
+              <div className="card-header">
+                <span className="card-title">Exit assumptions</span>
+                <span style={{fontSize:10,color:'var(--gray500)'}}>Click any value to edit</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:0}}>
+                {[
+                  ['Hold Period (years)','hold_period_years','number'],
+                  ['Target Exit Year','target_exit_year','number'],
+                  ['Target Exit Cap Rate','target_exit_cap_rate','number','','%'],
+                  ['Projected Exit Value','projected_exit_value','number','$'],
+                  ['Actual Exit Date','actual_exit_date','text'],
+                  ['Actual Exit Value','actual_exit_value','number','$'],
+                  ['Actual Realized IRR','actual_irr','number','','%'],
+                ].map(([label,field,type,prefix='',suffix=''])=>(
+                  <div key={field} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--gray100)'}}>
+                    <span style={{fontSize:12,color:'var(--gray600)'}}>{label}</span>
+                    <EditField label={label} value={asset[field]} onSave={v=>updateField(field,v)} type={type} prefix={prefix} suffix={suffix}/>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{display:'flex',flexDirection:'column',gap:0}}>
-              {[
-                ['Hold Period (years)','hold_period_years','number'],
-                ['Target Exit Year','target_exit_year','number'],
-                ['Target Exit Cap Rate','target_exit_cap_rate','number','','%'],
-                ['Projected Exit Value','projected_exit_value','number','$'],
-                ['Actual Exit Date','actual_exit_date','text'],
-                ['Actual Exit Value','actual_exit_value','number','$'],
-                ['Actual Realized IRR','actual_irr','number','','%'],
-              ].map(([label,field,type,prefix='',suffix=''])=>(
-                <div key={field} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--gray100)'}}>
-                  <span style={{fontSize:12,color:'var(--gray600)'}}>{label}</span>
-                  <EditField label={label} value={asset[field]} onSave={v=>updateField(field,v)} type={type} prefix={prefix} suffix={suffix}/>
+
+            {/* Live preview panel */}
+            <div className="card" style={{marginBottom:0}}>
+              <div className="card-header"><span className="card-title">Live return preview</span></div>
+
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:8,padding:'12px 14px'}}>
+                  <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Proj. IRR</div>
+                  <div style={{fontSize:26,fontFamily:'Playfair Display,serif',fontWeight:700,color:projIRR?(projIRR>=15?'var(--g600)':projIRR>=12?'var(--amber)':'var(--red)'):'var(--gray400)'}}>
+                    {projIRR?`${projIRR}%`:'—'}
+                  </div>
+                  <div style={{fontSize:9,color:'var(--gray400)',marginTop:2}}>auto-calculated</div>
                 </div>
-              ))}
+                <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
+                  <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Equity Multiple</div>
+                  <div style={{fontSize:26,fontFamily:'Playfair Display,serif',fontWeight:700,color:'var(--g900)'}}>{equityMultiple?`${equityMultiple}x`:'—'}</div>
+                </div>
+                <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
+                  <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Levered YOC</div>
+                  <div style={{fontSize:22,fontFamily:'Playfair Display,serif',fontWeight:600,color:'var(--g900)'}}>{levYoc?`${levYoc}%`:'—'}</div>
+                  <div style={{fontSize:9,color:'var(--gray400)',marginTop:2}}>(NOI-DS) / Acq. Price</div>
+                </div>
+                <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
+                  <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Years to Exit</div>
+                  <div style={{fontSize:22,fontFamily:'Playfair Display,serif',fontWeight:600,color:yearsToExit!==null&&yearsToExit<=0?'var(--red)':yearsToExit!==null&&yearsToExit<=2?'var(--amber)':'var(--g900)'}}>
+                    {yearsToExit!==null?(yearsToExit<0?`${Math.abs(yearsToExit)}y past`:`${yearsToExit}y`):'—'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:8,padding:'10px 14px',fontSize:11,color:'var(--g700)',lineHeight:1.7}}>
+                <strong>How IRR is calculated:</strong><br/>
+                Projected IRR = discount rate where NPV of (annual CFs + exit proceeds) = $0.<br/>
+                Annual CF = NOI - Debt Service. Hold years = Target Exit Year - Year Acquired
+              </div>
             </div>
           </div>
 
-          {/* Live preview panel */}
-          <div className="card" style={{marginBottom:0}}>
-            <div className="card-header"><span className="card-title">Live return preview</span></div>
-
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-              <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:8,padding:'12px 14px'}}>
-                <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Proj. IRR</div>
-                <div style={{fontSize:26,fontFamily:'Playfair Display,serif',fontWeight:700,color:projIRR?(projIRR>=15?'var(--g600)':projIRR>=12?'var(--amber)':'var(--red)'):'var(--gray400)'}}>
-                  {projIRR?`${projIRR}%`:'—'}
-                </div>
-                <div style={{fontSize:9,color:'var(--gray400)',marginTop:2}}>auto-calculated</div>
-              </div>
-              <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
-                <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Equity Multiple</div>
-                <div style={{fontSize:26,fontFamily:'Playfair Display,serif',fontWeight:700,color:'var(--g900)'}}>{equityMultiple?`${equityMultiple}x`:'—'}</div>
-              </div>
-              <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
-                <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Levered YOC</div>
-                <div style={{fontSize:22,fontFamily:'Playfair Display,serif',fontWeight:600,color:'var(--g900)'}}>{levYoc?`${levYoc}%`:'—'}</div>
-                <div style={{fontSize:9,color:'var(--gray400)',marginTop:2}}>(NOI−DS) ÷ Acq. Price</div>
-              </div>
-              <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
-                <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Years to Exit</div>
-                <div style={{fontSize:22,fontFamily:'Playfair Display,serif',fontWeight:600,color:yearsToExit!==null&&yearsToExit<=0?'var(--red)':yearsToExit!==null&&yearsToExit<=2?'var(--amber)':'var(--g900)'}}>
-                  {yearsToExit!==null?(yearsToExit<0?`${Math.abs(yearsToExit)}y past`:`${yearsToExit}y`):'—'}
-                </div>
-              </div>
+          {/* ── Underwriting vs. Actual ── */}
+          <div className="card" style={{marginTop:16}}>
+            <div className="card-header">
+              <span className="card-title">Underwriting vs. Actual</span>
+              <span style={{fontSize:10,color:'var(--gray500)'}}>Click underwritten values to edit</span>
             </div>
-
-            <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:8,padding:'10px 14px',fontSize:11,color:'var(--g700)',lineHeight:1.7}}>
-              <strong>How IRR is calculated:</strong><br/>
-              Projected IRR = discount rate where NPV of (annual CFs + exit proceeds) = $0.<br/>
-              Annual CF = NOI − Debt Service · Hold years = Target Exit Year − Year Acquired
+            <div style={{overflowX:'auto'}}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Underwritten</th>
+                    <th>Actual</th>
+                    <th>Variance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const rows = [
+                      {
+                        label: 'Purchase Price',
+                        uwField: 'uw_purchase_price',
+                        actual: asset.acquisition_price ? parseFloat(asset.acquisition_price) : null,
+                        format: fmtM,
+                        type: 'number',
+                        prefix: '$',
+                        noVariance: true,
+                      },
+                      {
+                        label: 'NOI',
+                        uwField: 'uw_noi',
+                        actual: asset.noi_trailing ? parseFloat(asset.noi_trailing) : null,
+                        format: fmtM,
+                        type: 'number',
+                        prefix: '$',
+                      },
+                      {
+                        label: 'Occupancy',
+                        uwField: 'uw_occupancy',
+                        actual: latestFinancial?.occupancy ? parseFloat(latestFinancial.occupancy) : null,
+                        format: v => v ? `${parseFloat(v).toFixed(1)}%` : '—',
+                        type: 'number',
+                        suffix: '%',
+                      },
+                      {
+                        label: 'ADR',
+                        uwField: 'uw_adr',
+                        actual: latestFinancial?.adr ? parseFloat(latestFinancial.adr) : null,
+                        format: v => v ? `$${parseFloat(v).toFixed(0)}` : '—',
+                        type: 'number',
+                        prefix: '$',
+                      },
+                      {
+                        label: 'Exit Cap Rate',
+                        uwField: 'uw_exit_cap_rate',
+                        actual: null,
+                        format: v => v ? `${parseFloat(v).toFixed(2)}%` : '—',
+                        type: 'number',
+                        suffix: '%',
+                        noVariance: true,
+                      },
+                    ]
+                    return rows.map(row => {
+                      const uw = asset[row.uwField] ? parseFloat(asset[row.uwField]) : null
+                      const act = row.actual
+                      let variance = null
+                      let varianceStr = '—'
+                      let varianceColor = 'var(--gray500)'
+                      if (!row.noVariance && uw && act) {
+                        variance = act - uw
+                        const variancePct = uw !== 0 ? ((variance / uw) * 100).toFixed(1) : 0
+                        const sign = variance >= 0 ? '+' : ''
+                        varianceStr = `${sign}${row.format(Math.abs(variance)).replace('—','')} (${sign}${variancePct}%)`
+                        varianceColor = variance >= 0 ? 'var(--g600)' : 'var(--red)'
+                      }
+                      return (
+                        <tr key={row.uwField}>
+                          <td style={{fontWeight:500}}>{row.label}</td>
+                          <td>
+                            <EditField
+                              label={row.label}
+                              value={asset[row.uwField]}
+                              onSave={v => updateField(row.uwField, v)}
+                              type={row.type}
+                              prefix={row.prefix || ''}
+                              suffix={row.suffix || ''}
+                            />
+                          </td>
+                          <td style={{color:'var(--gray700)'}}>{act !== null ? row.format(act) : '—'}</td>
+                          <td style={{color:varianceColor,fontWeight:variance?500:400}}>{varianceStr}</td>
+                        </tr>
+                      )
+                    })
+                  })()}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -485,7 +700,7 @@ export default function AssetDetail() {
                 <div className="form-group"><label className="form-label">GOP ($)</label><input className="form-input" type="number" value={pnlForm.gop} onChange={e=>setPnlForm(f=>({...f,gop:e.target.value}))}/></div>
               </div>
               <div className="form-group" style={{marginBottom:8}}>
-                <label className="form-label">NOI ($) <span style={{fontSize:9,color:'var(--gray400)'}}>— also updates Trailing NOI on asset (×12)</span></label>
+                <label className="form-label">NOI ($) <span style={{fontSize:9,color:'var(--gray400)'}}>-- also updates Trailing NOI on asset (x12)</span></label>
                 <input className="form-input" type="number" value={pnlForm.noi} onChange={e=>setPnlForm(f=>({...f,noi:e.target.value}))}/>
               </div>
               <div className="form-grid-2" style={{marginBottom:8}}>
@@ -507,7 +722,7 @@ export default function AssetDetail() {
 
             {/* Bar chart */}
             <div className="card" style={{marginBottom:0}}>
-              <div className="card-header"><span className="card-title">Revenue vs NOI ($000s) — last 12 months</span></div>
+              <div className="card-header"><span className="card-title">Revenue vs NOI ($000s) -- last 12 months</span></div>
               {chartData.some(d=>d.noi||d.revenue)?(
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={chartData}>
@@ -520,7 +735,7 @@ export default function AssetDetail() {
                 </ResponsiveContainer>
               ):(
                 <div style={{fontSize:12,color:'var(--gray500)',textAlign:'center',padding:'40px 20px'}}>
-                  No P&L data yet — save a period on the left.
+                  No P&L data yet -- save a period on the left.
                 </div>
               )}
             </div>
@@ -568,7 +783,7 @@ export default function AssetDetail() {
               {[
                 ['MPI (Occ. Index)',latestComp.occ_index,'Occupancy vs comp set'],
                 ['ARI (ADR Index)',latestComp.adr_index,'ADR vs comp set'],
-                ['RGI (RevPAR Index)',latestComp.revpar_index,'RevPAR vs comp set — 100 = fair share'],
+                ['RGI (RevPAR Index)',latestComp.revpar_index,'RevPAR vs comp set -- 100 = fair share'],
               ].map(([label,val,sub])=>{
                 const v = val ? parseFloat(val) : null
                 return <KPICard key={label} label={label} value={v?v.toFixed(1):null} sub={sub} color={indexColor(v)}/>
@@ -603,11 +818,11 @@ export default function AssetDetail() {
 
               <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--g600)',marginBottom:8}}>STR Indices (subject property)</div>
               <div className="form-grid-2" style={{marginBottom:8}}>
-                <div className="form-group"><label className="form-label">MPI — Occ. Index</label><input className="form-input" type="number" step="0.1" value={intelForm.occ_index} onChange={e=>setIntelForm(f=>({...f,occ_index:e.target.value}))}/></div>
-                <div className="form-group"><label className="form-label">ARI — ADR Index</label><input className="form-input" type="number" step="0.1" value={intelForm.adr_index} onChange={e=>setIntelForm(f=>({...f,adr_index:e.target.value}))}/></div>
+                <div className="form-group"><label className="form-label">MPI -- Occ. Index</label><input className="form-input" type="number" step="0.1" value={intelForm.occ_index} onChange={e=>setIntelForm(f=>({...f,occ_index:e.target.value}))}/></div>
+                <div className="form-group"><label className="form-label">ARI -- ADR Index</label><input className="form-input" type="number" step="0.1" value={intelForm.adr_index} onChange={e=>setIntelForm(f=>({...f,adr_index:e.target.value}))}/></div>
               </div>
               <div className="form-group" style={{marginBottom:12}}>
-                <label className="form-label">RGI — RevPAR Index</label>
+                <label className="form-label">RGI -- RevPAR Index</label>
                 <input className="form-input" type="number" step="0.1" value={intelForm.revpar_index} onChange={e=>setIntelForm(f=>({...f,revpar_index:e.target.value}))}/>
               </div>
 
@@ -630,22 +845,22 @@ export default function AssetDetail() {
               <div className="card-header"><span className="card-title">Index guide</span></div>
               <div style={{fontSize:12,color:'var(--gray700)',lineHeight:1.8}}>
                 <div style={{marginBottom:12}}>
-                  <strong>MPI</strong> (Market Penetration Index) — your occupancy ÷ comp set occupancy × 100.<br/>
-                  <strong>ARI</strong> (ADR Index) — your ADR ÷ comp set ADR × 100.<br/>
-                  <strong>RGI</strong> (RevPAR Index) — your RevPAR ÷ comp set RevPAR × 100.
+                  <strong>MPI</strong> (Market Penetration Index) -- your occupancy / comp set occupancy x 100.<br/>
+                  <strong>ARI</strong> (ADR Index) -- your ADR / comp set ADR x 100.<br/>
+                  <strong>RGI</strong> (RevPAR Index) -- your RevPAR / comp set RevPAR x 100.
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:6}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{width:10,height:10,borderRadius:'50%',background:'var(--g600)',display:'inline-block'}}></span>
-                    <span><strong style={{color:'var(--g600)'}}>≥ 105</strong> — outperforming comp set</span>
+                    <span><strong style={{color:'var(--g600)'}}>105+</strong> -- outperforming comp set</span>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{width:10,height:10,borderRadius:'50%',background:'var(--amber)',display:'inline-block'}}></span>
-                    <span><strong style={{color:'var(--amber)'}}>95–104</strong> — at or near fair share</span>
+                    <span><strong style={{color:'var(--amber)'}}>95-104</strong> -- at or near fair share</span>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{width:10,height:10,borderRadius:'50%',background:'var(--red)',display:'inline-block'}}></span>
-                    <span><strong style={{color:'var(--red)'}}>&lt; 95</strong> — underperforming comp set</span>
+                    <span><strong style={{color:'var(--red)'}}>Below 95</strong> -- underperforming comp set</span>
                   </div>
                 </div>
               </div>
@@ -686,6 +901,285 @@ export default function AssetDetail() {
               <div className="empty-state-icon">📉</div>
               <div className="empty-state-title">No STR data yet</div>
               <div className="empty-state-desc">Enter monthly STR index data using the form above.</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ HOTEL PROFILE TAB ══ */}
+      {tab==='hotel'&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+          {/* Left column */}
+          <div>
+            {/* Franchise & Brand */}
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Franchise & Brand</span>
+                <span style={{fontSize:10,color:'var(--gray500)'}}>Click to edit</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:0}}>
+                {[
+                  ['Brand / Flag','brand','text'],
+                  ['Franchise Expiry','franchise_expiry','date'],
+                  ['Franchise Fee','franchise_fee_pct','number','','%'],
+                  ['Royalty Structure','royalty_structure','text'],
+                  ['PIP Cost Estimate','pip_cost_estimate','number','$'],
+                  ['PIP Deadline','pip_deadline','date'],
+                  ['Key Money Received','key_money_received','number','$'],
+                ].map(([label,field,type,prefix='',suffix=''])=>(
+                  <div key={field} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--gray100)'}}>
+                    <span style={{fontSize:12,color:'var(--gray600)'}}>{label}</span>
+                    {type==='date' ? (
+                      <div style={{display:'flex',alignItems:'center',gap:4}}>
+                        <span style={{fontWeight:500,color:'var(--g900)',fontSize:12}}>{fmtDate(asset[field])}</span>
+                        <input type="date" className="form-input" style={{fontSize:11,padding:'2px 6px',width:130}} value={asset[field]||''} onChange={e=>updateField(field,e.target.value)}/>
+                      </div>
+                    ) : (
+                      <EditField label={label} value={asset[field]} onSave={v=>updateField(field,v)} type={type} prefix={prefix} suffix={suffix}/>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Management */}
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Management</span>
+                <span style={{fontSize:10,color:'var(--gray500)'}}>Click to edit</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:0}}>
+                {[
+                  ['Management Company','management_company','text'],
+                  ['Management Fee','management_fee_pct','number','','%'],
+                  ['Incentive Fee Structure','incentive_fee_structure','text'],
+                  ['Contract Expiry','mgmt_contract_expiry','date'],
+                  ['Termination Provisions','termination_provisions','text'],
+                ].map(([label,field,type,prefix='',suffix=''])=>(
+                  <div key={field} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--gray100)'}}>
+                    <span style={{fontSize:12,color:'var(--gray600)'}}>{label}</span>
+                    {type==='date' ? (
+                      <div style={{display:'flex',alignItems:'center',gap:4}}>
+                        <span style={{fontWeight:500,color:'var(--g900)',fontSize:12}}>{fmtDate(asset[field])}</span>
+                        <input type="date" className="form-input" style={{fontSize:11,padding:'2px 6px',width:130}} value={asset[field]||''} onChange={e=>updateField(field,e.target.value)}/>
+                      </div>
+                    ) : (
+                      <EditField label={label} value={asset[field]} onSave={v=>updateField(field,v)} type={type} prefix={prefix} suffix={suffix}/>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right column */}
+          <div>
+            {/* Ground Lease */}
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Ground Lease</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--gray100)'}}>
+                <span style={{fontSize:12,color:'var(--gray600)'}}>Land Ownership</span>
+                <EditSelect
+                  value={asset.land_owned === false ? 'leased' : 'owned'}
+                  options={[{value:'owned',label:'Owned'},{value:'leased',label:'Leased'}]}
+                  onSave={v => updateField('land_owned', v === 'owned')}
+                />
+              </div>
+              {asset.land_owned === false && (
+                <>
+                  {groundLeaseWarning && (
+                    <div style={{background:'var(--amberL)',border:'1px solid #ffe082',borderRadius:8,padding:'10px 14px',fontSize:12,color:'#7a5500',marginTop:8,marginBottom:4}}>
+                      Ground lease expires within 10 years ({fmtDate(asset.ground_lease_expiry)}). Review extension or exit strategy.
+                    </div>
+                  )}
+                  {[
+                    ['Ground Lease Expiry','ground_lease_expiry','date'],
+                    ['Annual Ground Rent','ground_lease_annual_rent','number','$'],
+                    ['Escalation Structure','ground_lease_escalation','text'],
+                  ].map(([label,field,type,prefix='',suffix=''])=>(
+                    <div key={field} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--gray100)'}}>
+                      <span style={{fontSize:12,color:'var(--gray600)'}}>{label}</span>
+                      {type==='date' ? (
+                        <div style={{display:'flex',alignItems:'center',gap:4}}>
+                          <span style={{fontWeight:500,color:'var(--g900)',fontSize:12}}>{fmtDate(asset[field])}</span>
+                          <input type="date" className="form-input" style={{fontSize:11,padding:'2px 6px',width:130}} value={asset[field]||''} onChange={e=>updateField(field,e.target.value)}/>
+                        </div>
+                      ) : (
+                        <EditField label={label} value={asset[field]} onSave={v=>updateField(field,v)} type={type} prefix={prefix} suffix={suffix}/>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Room Mix */}
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Room Mix</span>
+                <span style={{fontSize:10,color:'var(--gray500)'}}>
+                  {totalRoomTypesCount} of {asset.rooms || '?'} rooms allocated
+                </span>
+              </div>
+
+              {roomStatus&&(
+                <div style={{background:roomStatus.type==='success'?'var(--g100)':'var(--redL)',color:roomStatus.type==='success'?'var(--g700)':'var(--red)',padding:'7px 12px',borderRadius:7,fontSize:12,marginBottom:12}}>
+                  {roomStatus.type==='success'?'Saved':'Error: '+roomStatus.msg}
+                </div>
+              )}
+
+              {roomTypes.length>0&&(
+                <div style={{overflowX:'auto',marginBottom:12}}>
+                  <table className="data-table">
+                    <thead><tr><th>Type</th><th>Count</th><th>Rate Premium</th><th>Notes</th><th></th></tr></thead>
+                    <tbody>
+                      {roomTypes.map(rt=>(
+                        <tr key={rt.id}>
+                          <td style={{fontWeight:500}}>{rt.room_type}</td>
+                          <td>{rt.count}</td>
+                          <td>{rt.rate_premium ? `${rt.rate_premium}% vs standard` : '—'}</td>
+                          <td style={{fontSize:11,color:'var(--gray500)'}}>{rt.notes||'—'}</td>
+                          <td><button className="card-action" style={{color:'var(--red)',fontSize:10}} onClick={()=>deleteRoomType(rt.id)}>Del</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div style={{background:'var(--gray50)',borderRadius:8,padding:'12px 14px',border:'1px solid var(--gray100)'}}>
+                <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--g600)',marginBottom:8}}>Add Room Type</div>
+                <div className="form-grid-2" style={{marginBottom:8}}>
+                  <div className="form-group" style={{margin:0}}>
+                    <label className="form-label">Type</label>
+                    <select className="form-select" value={roomForm.room_type} onChange={e=>setRoomForm(f=>({...f,room_type:e.target.value}))}>
+                      {ROOM_TYPE_OPTIONS.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{margin:0}}>
+                    <label className="form-label">Count</label>
+                    <input className="form-input" type="number" value={roomForm.count} onChange={e=>setRoomForm(f=>({...f,count:e.target.value}))} placeholder="0"/>
+                  </div>
+                </div>
+                <div className="form-grid-2" style={{marginBottom:8}}>
+                  <div className="form-group" style={{margin:0}}>
+                    <label className="form-label">Rate Premium (% vs standard)</label>
+                    <input className="form-input" type="number" step="0.1" value={roomForm.rate_premium} onChange={e=>setRoomForm(f=>({...f,rate_premium:e.target.value}))} placeholder="0"/>
+                  </div>
+                  <div className="form-group" style={{margin:0}}>
+                    <label className="form-label">Notes</label>
+                    <input className="form-input" value={roomForm.notes} onChange={e=>setRoomForm(f=>({...f,notes:e.target.value}))} placeholder="Optional"/>
+                  </div>
+                </div>
+                <button className="btn btn-primary btn-sm" onClick={saveRoomType} disabled={roomSaving} style={{width:'100%'}}>
+                  {roomSaving?'Saving...':'Add Room Type'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ CAPEX & PIP TAB ══ */}
+      {tab==='capex'&&(
+        <div>
+          {/* Entry form */}
+          <div className="card">
+            <div className="card-header"><span className="card-title">Add CapEx Entry</span></div>
+            {capexStatus&&(
+              <div style={{background:capexStatus.type==='success'?'var(--g100)':'var(--redL)',color:capexStatus.type==='success'?'var(--g700)':'var(--red)',padding:'7px 12px',borderRadius:7,fontSize:12,marginBottom:12}}>
+                {capexStatus.type==='success'?'Saved':'Error: '+capexStatus.msg}
+              </div>
+            )}
+            <div style={{display:'flex',gap:10,alignItems:'flex-end',flexWrap:'wrap'}}>
+              <div className="form-group" style={{margin:0,flex:'0 0 80px'}}>
+                <label className="form-label">Year</label>
+                <input className="form-input" type="number" value={capexForm.year} onChange={e=>setCapexForm(f=>({...f,year:e.target.value}))}/>
+              </div>
+              <div className="form-group" style={{margin:0,flex:'0 0 140px'}}>
+                <label className="form-label">Category</label>
+                <select className="form-select" value={capexForm.category} onChange={e=>setCapexForm(f=>({...f,category:e.target.value}))}>
+                  {CAPEX_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{margin:0,flex:'0 0 130px'}}>
+                <label className="form-label">Amount ($)</label>
+                <input className="form-input" type="number" value={capexForm.amount} onChange={e=>setCapexForm(f=>({...f,amount:e.target.value}))} placeholder="0"/>
+              </div>
+              <div className="form-group" style={{margin:0,flex:'1 1 200px'}}>
+                <label className="form-label">Description</label>
+                <input className="form-input" value={capexForm.description} onChange={e=>setCapexForm(f=>({...f,description:e.target.value}))} placeholder="Optional description"/>
+              </div>
+              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,cursor:'pointer',paddingBottom:4}}>
+                <input type="checkbox" checked={capexForm.brand_required} onChange={e=>setCapexForm(f=>({...f,brand_required:e.target.checked}))}/>
+                Brand required
+              </label>
+              <button className="btn btn-primary btn-sm" onClick={saveCapex} disabled={capexSaving} style={{marginBottom:4}}>
+                {capexSaving?'Saving...':'Save'}
+              </button>
+            </div>
+          </div>
+
+          {/* KPI cards */}
+          <div className="kpi-grid" style={{marginBottom:16}}>
+            <KPICard label="Total CapEx All Time" value={fmtM(totalCapex)} sub={`${capex.length} entries`}/>
+            <KPICard label="Brand-Required" value={fmtM(brandRequiredCapex)} sub={totalCapex ? `${((brandRequiredCapex/totalCapex)*100).toFixed(0)}% of total` : '—'} color="var(--amber)"/>
+            <KPICard label="Elective" value={fmtM(electiveCapex)} sub={totalCapex ? `${((electiveCapex/totalCapex)*100).toFixed(0)}% of total` : '—'} color="var(--g600)"/>
+            <KPICard label="PIP Spend" value={fmtM(pipCapex)}/>
+          </div>
+
+          {/* Bar chart */}
+          {capexChartData.length > 0 && (
+            <div className="card" style={{marginBottom:16}}>
+              <div className="card-header"><span className="card-title">CapEx by Year</span></div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={capexChartData}>
+                  <XAxis dataKey="year" tick={{fontSize:10}} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fontSize:10}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1e6).toFixed(1)}M`}/>
+                  <Tooltip formatter={(v,n)=>[fmtM(v),n]} contentStyle={{fontSize:11,borderRadius:6}}/>
+                  <Legend wrapperStyle={{fontSize:11}}/>
+                  <Bar dataKey="brandRequired" stackId="a" fill="var(--amber)" name="Brand Required" radius={[0,0,0,0]}/>
+                  <Bar dataKey="elective" stackId="a" fill="var(--g600)" name="Elective" radius={[2,2,0,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* History table */}
+          {capex.length>0 ? (
+            <div className="card">
+              <div className="card-header"><span className="card-title">CapEx History</span></div>
+              <div style={{overflowX:'auto'}}>
+                <table className="data-table">
+                  <thead><tr><th>Year</th><th>Category</th><th>Amount</th><th>Brand Required</th><th>Description</th><th></th></tr></thead>
+                  <tbody>
+                    {capex.map(c=>(
+                      <tr key={c.id}>
+                        <td style={{fontWeight:500}}>{c.year}</td>
+                        <td>{c.category}</td>
+                        <td style={{fontWeight:500}}>{fmtM(c.amount)}</td>
+                        <td>
+                          {c.brand_required ? (
+                            <span style={{fontSize:10,background:'var(--amberL)',color:'var(--amber)',padding:'2px 7px',borderRadius:10,fontWeight:500}}>Brand Required</span>
+                          ) : (
+                            <span style={{fontSize:10,color:'var(--gray400)'}}>Elective</span>
+                          )}
+                        </td>
+                        <td style={{fontSize:11,color:'var(--gray500)'}}>{c.description||'—'}</td>
+                        <td><button className="card-action" style={{color:'var(--red)',fontSize:10}} onClick={()=>deleteCapex(c.id)}>Del</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div className="empty-state-icon">🏗</div>
+              <div className="empty-state-title">No CapEx data yet</div>
+              <div className="empty-state-desc">Add capital expenditure entries using the form above.</div>
             </div>
           )}
         </div>

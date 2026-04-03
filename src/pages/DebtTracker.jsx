@@ -74,7 +74,8 @@ function DebtModal({ debt, assets, onClose, onSave }) {
     asset_id:assets[0]?.id||'', lender:'', loan_type:'senior', rate_type:'fixed',
     original_balance:'', current_balance:'', interest_rate:'', ltv:'',
     origination_date:'', maturity_date:'', debt_service_annual:'', extension_options:'',
-    prepayment_penalty:false, notes:'', covenant_test_frequency:'quarterly', covenant_test_date:'', covenant_notes:'',
+    prepayment_penalty:false, assumable:false, recourse:false, prepayment_structure:'none',
+    notes:'', covenant_test_frequency:'quarterly', covenant_test_date:'', covenant_notes:'',
     ...blankCovs
   })
   const [loading, setLoading] = useState(false)
@@ -161,6 +162,18 @@ function DebtModal({ debt, assets, onClose, onSave }) {
           <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer',marginBottom:12}}>
             <input type="checkbox" checked={form.prepayment_penalty} onChange={e=>set('prepayment_penalty',e.target.checked)}/>Prepayment penalty applies
           </label>
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer',marginBottom:12}}>
+            <input type="checkbox" checked={form.assumable||false} onChange={e=>set('assumable',e.target.checked)}/>Loan is assumable
+          </label>
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,cursor:'pointer',marginBottom:12}}>
+            <input type="checkbox" checked={form.recourse||false} onChange={e=>set('recourse',e.target.checked)}/>Personal recourse
+          </label>
+          <div className="form-group" style={{marginBottom:12}}>
+            <label className="form-label">Prepayment Structure</label>
+            <select className="form-select" value={form.prepayment_structure||'none'} onChange={e=>set('prepayment_structure',e.target.value)}>
+              {['none','defeasance','yield_maintenance','step_down','lockout'].map(v=><option key={v} value={v}>{v==='none'?'None':v==='yield_maintenance'?'Yield Maintenance':v==='step_down'?'Step-Down':v.charAt(0).toUpperCase()+v.slice(1)}</option>)}
+            </select>
+          </div>
           <div className="form-group"><label className="form-label">Notes</label><textarea className="form-input" rows={2} value={form.notes} onChange={e=>set('notes',e.target.value)} style={{resize:'vertical'}}/></div>
         </>)}
 
@@ -315,6 +328,22 @@ export default function DebtTracker() {
 
                   {isExpanded&&(
                     <div style={{paddingLeft:16,paddingBottom:16,borderTop:'1px dashed var(--gray100)'}}>
+                      {/* Loan details */}
+                      <div style={{fontSize:11,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--gray500)',marginTop:12,marginBottom:8}}>Loan Details</div>
+                      <div style={{display:'flex',gap:16,flexWrap:'wrap',marginBottom:12}}>
+                        <div style={{fontSize:12,color:'var(--gray700)'}}>
+                          <span style={{color:'var(--gray500)'}}>Assumable:</span>{' '}
+                          <span style={{fontWeight:500}}>{d.assumable?'Yes':'No'}</span>
+                        </div>
+                        <div style={{fontSize:12,color:'var(--gray700)'}}>
+                          <span style={{color:'var(--gray500)'}}>Recourse:</span>{' '}
+                          <span style={{fontWeight:500,color:d.recourse?'var(--red)':'var(--g600)'}}>{d.recourse?'Yes':'No'}</span>
+                        </div>
+                        <div style={{fontSize:12,color:'var(--gray700)'}}>
+                          <span style={{color:'var(--gray500)'}}>Prepayment Structure:</span>{' '}
+                          <span style={{fontWeight:500}}>{d.prepayment_structure&&d.prepayment_structure!=='none'?d.prepayment_structure.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()):'None'}</span>
+                        </div>
+                      </div>
                       <div style={{fontSize:11,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--gray500)',marginTop:12,marginBottom:8}}>Covenants</div>
                       {!COVENANTS.some(c=>d[c.minField]||d[c.actualField])?(
                         <div style={{fontSize:12,color:'var(--gray500)',marginBottom:8}}>No covenant data. Click Edit → Covenants tab to add.</div>
