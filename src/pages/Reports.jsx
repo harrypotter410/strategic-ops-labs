@@ -26,19 +26,32 @@ const REPORT_TYPES = [
 // Inject print CSS — only the report preview panel will print
 const PRINT_STYLE = `
 @media print {
-  body * { visibility: hidden !important; }
-  #soul-report-preview, #soul-report-preview * { visibility: visible !important; }
-  #soul-report-preview {
-    position: fixed !important;
-    top: 0 !important; left: 0 !important;
+  /* Hide app chrome */
+  .topbar, .sidebar, .sidebar-collapse-btn { display: none !important; }
+
+  /* Reset layout so report fills the full page */
+  .app-shell, .content-area { display: block !important; }
+  .main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+
+  /* Hide the config panel (first grid child) — only show the report */
+  #soul-report-config { display: none !important; }
+  #soul-report-wrapper {
+    display: block !important;
     width: 100% !important;
-    background: white !important;
-    padding: 32px !important;
-    z-index: 9999 !important;
-    font-family: 'DM Sans', sans-serif !important;
   }
-  @page { margin: 0.5in; size: letter; }
-  table { page-break-inside: avoid; }
+
+  /* Let the report card flow across pages */
+  #soul-report-preview {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  @page { margin: 0.5in; size: letter portrait; }
+  table { page-break-inside: avoid; width: 100%; font-size: 10px; }
+  thead { display: table-header-group; }
   .report-section { page-break-inside: avoid; margin-bottom: 24px; }
 }
 `
@@ -101,7 +114,7 @@ export default function Reports() {
   return (
     <div style={{display:'grid',gridTemplateColumns:'300px 1fr',gap:20}}>
       {/* LEFT: Config panel */}
-      <div>
+      <div id="soul-report-config">
         <div className="card">
           <div className="card-header"><span className="card-title">Report builder</span></div>
 
@@ -154,7 +167,7 @@ export default function Reports() {
       </div>
 
       {/* RIGHT: Report preview — id="soul-report-preview" targets print CSS */}
-      <div>
+      <div id="soul-report-wrapper">
         <div id="soul-report-preview" style={{background:'#fff',border:'1px solid var(--gray100)',borderRadius:12,overflow:'hidden',boxShadow:'var(--shadow-md)'}}>
 
           {/* Cover */}
