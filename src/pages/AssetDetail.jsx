@@ -43,7 +43,7 @@ function EditField({ label, value, onSave, type='text', prefix='', suffix='', ti
     setEditing(false)
     if (String(val) !== String(value||'')) await onSave(val)
   }
-  const display = value ? `${prefix}${type==='number'&&parseFloat(value)>=1e6?fmtM(parseFloat(value)):parseFloat(value)||value}${suffix}` : '—'
+  const display = value ? (type==='number'&&parseFloat(value)>=1e6 ? fmtM(parseFloat(value)) : `${prefix}${parseFloat(value)||value}${suffix}`) : '—'
 
   if (editing) return (
     <div style={{display:'flex',gap:4}}>
