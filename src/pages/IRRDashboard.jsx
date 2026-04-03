@@ -64,10 +64,9 @@ export default function IRRDashboard() {
   const approachingExit = assetIRR.filter(a=>a.yearsToExit!==null&&a.yearsToExit>=0&&a.yearsToExit<=2)
   const avgPipelineIRR = activeDeals.filter(d=>d.projected_irr).length ? (activeDeals.filter(d=>d.projected_irr).reduce((s,d)=>s+parseFloat(d.projected_irr),0)/activeDeals.filter(d=>d.projected_irr).length).toFixed(1) : null
 
-  const irrChartData = assetIRR.filter(a=>a.projIRR||a.yoc).map(a=>({
+  const irrChartData = assetIRR.filter(a=>a.projIRR).map(a=>({
     name:a.name.split(' ').slice(0,2).join(' '),
     'Proj. IRR':a.projIRR,
-    'YOC':a.yoc,
   }))
 
   return (
@@ -143,14 +142,13 @@ export default function IRRDashboard() {
 
       {irrChartData.length>0&&(
         <div className="card">
-          <div className="card-header"><span className="card-title">Projected IRR & YOC by asset</span></div>
+          <div className="card-header"><span className="card-title">Projected IRR by asset</span></div>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={irrChartData} layout="vertical">
               <XAxis type="number" tick={{fontSize:10}} axisLine={false} tickLine={false} unit="%"/>
               <YAxis type="category" dataKey="name" tick={{fontSize:11}} axisLine={false} tickLine={false} width={120}/>
               <Tooltip formatter={(v,n)=>[v?`${v}%`:'—',n]} contentStyle={{fontSize:11,borderRadius:6}}/>
               <Bar dataKey="Proj. IRR" fill="var(--g600)" radius={[0,3,3,0]}/>
-              <Bar dataKey="YOC" fill="var(--g200)" radius={[0,3,3,0]}/>
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -168,7 +166,6 @@ export default function IRRDashboard() {
               <th>Asset</th><th>Acquired</th><th>Yrs Held</th>
               <th>Acq. Price</th><th>Current Value</th>
               <th>Unrealized Gain</th><th>Equity Multiple</th>
-              <th>YOC</th>
               <th title="Calculated from: Acq Price, Proj Exit Value, Hold Years, NOI−DS as annual CF">Proj. IRR ⓘ</th>
               <th>Target Exit</th><th>Yrs to Exit</th>
               <th>Proj. Exit Value</th>
@@ -183,7 +180,6 @@ export default function IRRDashboard() {
                   <td>{fmtM(a.current_value)}</td>
                   <td style={{color:a.unrealizedGain>=0?'var(--g600)':'var(--red)',fontWeight:500}}>{a.unrealizedGain!==null?`${a.unrealizedGain>=0?'+':''}${fmtM(a.unrealizedGain)}`:'—'}</td>
                   <td style={{fontWeight:500}}>{a.equityMultiple?`${a.equityMultiple}x`:'—'}</td>
-                  <td>{a.yoc?`${a.yoc}%`:'—'}</td>
                   <td style={{fontWeight:600,color:a.projIRR?(a.projIRR>=15?'var(--g600)':a.projIRR>=12?'var(--amber)':'var(--red)'):'var(--gray400)'}}>
                     {a.projIRR?`${a.projIRR}%`:<Link to={`/assets/${a.id}`} style={{fontSize:10,color:'var(--g600)',textDecoration:'none'}}>Add data →</Link>}
                   </td>

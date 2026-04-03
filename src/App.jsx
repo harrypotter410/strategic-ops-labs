@@ -5,8 +5,7 @@ import Login from './pages/Login'
 import Overview from './pages/Overview'
 import Assets from './pages/Assets'
 import AssetDetail from './pages/AssetDetail'
-import Financial from './pages/Financial'
-import KPIs from './pages/KPIs'
+import Performance from './pages/Performance'
 import Valuations from './pages/Valuations'
 import Pipeline from './pages/Pipeline'
 import DealDetail from './pages/DealDetail'
@@ -47,8 +46,8 @@ export default function App() {
           <Route path="/tasks" element={<ProtectedRoute><Tasks/></ProtectedRoute>}/>
           <Route path="/assets" element={<ProtectedRoute><Assets/></ProtectedRoute>}/>
           <Route path="/assets/:id" element={<ProtectedRoute><AssetDetail/></ProtectedRoute>}/>
-          <Route path="/financial" element={<ProtectedRoute><Financial/></ProtectedRoute>}/>
-          <Route path="/kpis" element={<ProtectedRoute><KPIs/></ProtectedRoute>}/>
+          <Route path="/financial" element={<ProtectedRoute><Performance/></ProtectedRoute>}/>
+          <Route path="/kpis" element={<ProtectedRoute><Performance/></ProtectedRoute>}/>
           <Route path="/valuations" element={<ProtectedRoute><Valuations/></ProtectedRoute>}/>
           <Route path="/debt" element={<ProtectedRoute><DebtTracker/></ProtectedRoute>}/>
           <Route path="/irr" element={<ProtectedRoute><IRRDashboard/></ProtectedRoute>}/>

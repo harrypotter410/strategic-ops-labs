@@ -43,8 +43,7 @@ const nav = [
   ]},
   { section: 'Asset Management', items: [
     { to: '/assets', label: 'Asset Tracker', icon: <svg viewBox="0 0 16 16" fill="none"><path d="M8 1L14 5V11L8 15L2 11V5L8 1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg> },
-    { to: '/financial', label: 'Financial Performance', icon: <svg viewBox="0 0 16 16" fill="none"><polyline points="2,12 6,7 9,9 14,4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-    { to: '/kpis', label: 'Property KPIs', icon: <svg viewBox="0 0 16 16" fill="none"><circle cx="5" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5"/><circle cx="11" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.5"/></svg> },
+    { to: '/financial', label: 'Performance', icon: <svg viewBox="0 0 16 16" fill="none"><polyline points="2,12 6,7 9,9 14,4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg> },
     { to: '/valuations', label: 'Valuations', icon: <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="10" width="2.5" height="4" rx=".5" fill="currentColor"/><rect x="6.5" y="7" width="2.5" height="7" rx=".5" fill="currentColor"/><rect x="11" y="4" width="2.5" height="10" rx=".5" fill="currentColor"/></svg> },
     { to: '/debt', label: 'Debt & Covenants', icon: <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M1 7h14" stroke="currentColor" strokeWidth="1.5"/><circle cx="5" cy="10.5" r="1" fill="currentColor"/></svg> },
     { to: '/irr', label: 'IRR & Exit Analysis', icon: <svg viewBox="0 0 16 16" fill="none"><polyline points="2,14 5,9 8,11 14,4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="14" cy="4" r="1.5" fill="currentColor"/></svg> },
