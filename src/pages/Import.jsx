@@ -16,11 +16,11 @@ const IMPORT_TYPES = [
 ]
 
 const SYSTEM_PROMPTS = {
-  pl: 'You are extracting hotel financial data from an operator P&L report. Return ONLY a JSON array where each element has: property_name, period_month (1-12), period_year (4 digits), revenue (number in dollars), gop (gross operating profit, number), noi (net operating income, number), occupancy (percentage as decimal e.g. 0.78), adr (average daily rate, number), revpar (number). If a field is not found return null. Return only valid JSON, no other text.',
-  str: 'You are extracting hotel competitive benchmarking data from an STR report. Return ONLY a JSON array where each element has: property_name, period_month (1-12), period_year (4 digits), my_occupancy (decimal), my_adr (number), my_revpar (number), comp_set_occ (decimal), comp_set_adr (number), comp_set_revpar (number), occ_index (MPI, number e.g. 107.3), adr_index (ARI, number), revpar_index (RGI, number). Return only valid JSON, no other text.',
-  appraisal: 'You are extracting data from a real estate appraisal report. Return ONLY a JSON object with: property_name, valuation_date (YYYY-MM-DD), appraised_value (number in dollars), cap_rate_applied (percentage as decimal e.g. 0.065), noi_used (number), equity_value (number or null), notes (brief string summarizing key findings, max 200 chars). Return only valid JSON, no other text.',
+  pl: 'You are extracting hotel financial data from an operator P&L report. Return ONLY a JSON array where each element has: property_name, period_month (1-12), period_year (4 digits), revenue (number in dollars), gop (gross operating profit, number), noi (net operating income, number), occupancy (percentage as a number e.g. 78 for 78%, NOT 0.78), adr (average daily rate, number), revpar (number). If a field is not found return null. Return only valid JSON, no other text.',
+  str: 'You are extracting hotel competitive benchmarking data from an STR report. Return ONLY a JSON array where each element has: property_name, period_month (1-12), period_year (4 digits), my_occupancy (percentage as a number e.g. 78 for 78%, NOT 0.78), my_adr (number), my_revpar (number), comp_set_occ (percentage as a number e.g. 72 for 72%, NOT 0.72), comp_set_adr (number), comp_set_revpar (number), occ_index (MPI, number e.g. 107.3), adr_index (ARI, number), revpar_index (RGI, number). Return only valid JSON, no other text.',
+  appraisal: 'You are extracting data from a real estate appraisal report. Return ONLY a JSON object with: property_name, valuation_date (YYYY-MM-DD), appraised_value (number in dollars), cap_rate_applied (percentage as a number e.g. 6.5 for 6.5%, NOT 0.065), noi_used (number), equity_value (number or null), notes (brief string summarizing key findings, max 200 chars). Return only valid JSON, no other text.',
   loan: 'You are extracting data from a commercial real estate loan document or term sheet. Return ONLY a JSON object with: property_name, lender, loan_type (one of: senior, mezzanine, bridge, permanent, construction, preferred_equity), original_balance (number), current_balance (number or null), interest_rate (percentage as a number e.g. 5.75 for 5.75%, NOT 0.0575), rate_type (fixed or floating), maturity_date (YYYY-MM-DD), annual_debt_service (number or null), ltv (percentage as a number e.g. 65 for 65%, NOT 0.65, or null), covenant_dscr_min (number or null), covenant_ltv_max (percentage as a number e.g. 75 for 75%, or null), covenant_occupancy_min (percentage as a number e.g. 60 for 60%, or null). Return only valid JSON, no other text.',
-  franchise: 'You are extracting data from a hotel franchise agreement or management contract. Return ONLY a JSON object with: property_name, franchise_expiry (YYYY-MM-DD or null), franchise_fee_pct (decimal or null), pip_cost_estimate (number in dollars or null), pip_deadline (YYYY-MM-DD or null), management_company (string or null), management_fee_pct (decimal or null), mgmt_contract_expiry (YYYY-MM-DD or null). Return only valid JSON, no other text.',
+  franchise: 'You are extracting data from a hotel franchise agreement or management contract. Return ONLY a JSON object with: property_name, franchise_expiry (YYYY-MM-DD or null), franchise_fee_pct (percentage as a number e.g. 5 for 5%, NOT 0.05, or null), pip_cost_estimate (number in dollars or null), pip_deadline (YYYY-MM-DD or null), management_company (string or null), management_fee_pct (percentage as a number e.g. 3 for 3%, NOT 0.03, or null), mgmt_contract_expiry (YYYY-MM-DD or null). Return only valid JSON, no other text.',
 }
 
 // Types that return an array of rows (vs. a single object)
@@ -34,7 +34,7 @@ const FIELD_DEFS = {
     { key: 'revenue',       label: 'Revenue ($)' },
     { key: 'gop',           label: 'GOP ($)' },
     { key: 'noi',           label: 'NOI ($)' },
-    { key: 'occupancy',     label: 'Occupancy' },
+    { key: 'occupancy',     label: 'Occupancy (%, e.g. 78)' },
     { key: 'adr',           label: 'ADR ($)' },
     { key: 'revpar',        label: 'RevPAR ($)' },
   ],
@@ -42,10 +42,10 @@ const FIELD_DEFS = {
     { key: 'property_name',   label: 'Property' },
     { key: 'period_month',    label: 'Month' },
     { key: 'period_year',     label: 'Year' },
-    { key: 'my_occupancy',    label: 'My Occ' },
+    { key: 'my_occupancy',    label: 'My Occ (%, e.g. 78)' },
     { key: 'my_adr',          label: 'My ADR' },
     { key: 'my_revpar',       label: 'My RevPAR' },
-    { key: 'comp_set_occ',    label: 'Comp Occ' },
+    { key: 'comp_set_occ',    label: 'Comp Occ (%, e.g. 72)' },
     { key: 'comp_set_adr',    label: 'Comp ADR' },
     { key: 'comp_set_revpar', label: 'Comp RevPAR' },
     { key: 'occ_index',       label: 'MPI' },
@@ -56,7 +56,7 @@ const FIELD_DEFS = {
     { key: 'property_name',    label: 'Property Name' },
     { key: 'valuation_date',   label: 'Valuation Date (YYYY-MM-DD)' },
     { key: 'appraised_value',  label: 'Appraised Value ($)' },
-    { key: 'cap_rate_applied', label: 'Cap Rate (decimal, e.g. 0.065)' },
+    { key: 'cap_rate_applied', label: 'Cap Rate Applied (%, e.g. 6.5)' },
     { key: 'noi_used',         label: 'NOI Used ($)' },
     { key: 'equity_value',     label: 'Equity Value ($)' },
     { key: 'notes',            label: 'Notes' },
@@ -79,11 +79,11 @@ const FIELD_DEFS = {
   franchise: [
     { key: 'property_name',       label: 'Property Name' },
     { key: 'franchise_expiry',    label: 'Franchise Expiry (YYYY-MM-DD)' },
-    { key: 'franchise_fee_pct',   label: 'Franchise Fee % (decimal)' },
+    { key: 'franchise_fee_pct',   label: 'Franchise Fee (%, e.g. 5)' },
     { key: 'pip_cost_estimate',   label: 'PIP Cost Estimate ($)' },
     { key: 'pip_deadline',        label: 'PIP Deadline (YYYY-MM-DD)' },
     { key: 'management_company',  label: 'Management Company' },
-    { key: 'management_fee_pct',  label: 'Mgmt Fee % (decimal)' },
+    { key: 'management_fee_pct',  label: 'Mgmt Fee (%, e.g. 3)' },
     { key: 'mgmt_contract_expiry',label: 'Mgmt Contract Expiry (YYYY-MM-DD)' },
   ],
 }
@@ -204,6 +204,12 @@ function parseNum(v) {
   return isNaN(n) ? null : n
 }
 
+// Normalize percentage fields: if Claude returned a decimal (< 1), convert to human-readable %
+function normPct(v) {
+  const n = parseNum(v)
+  return n !== null && n < 1 ? n * 100 : n
+}
+
 async function saveData(importType, assetId, editedData) {
   if (importType === 'pl') {
     const rows = editedData.map(row => ({
@@ -213,7 +219,7 @@ async function saveData(importType, assetId, editedData) {
       revenue:      parseNum(row.revenue),
       gop:          parseNum(row.gop),
       noi:          parseNum(row.noi),
-      occupancy:    parseNum(row.occupancy),
+      occupancy:    normPct(row.occupancy),
       adr:          parseNum(row.adr),
       revpar:       parseNum(row.revpar),
     }))
@@ -227,10 +233,10 @@ async function saveData(importType, assetId, editedData) {
       asset_id:        assetId,
       period_month:    parseInt(row.period_month) || null,
       period_year:     parseInt(row.period_year)  || null,
-      my_occupancy:    parseNum(row.my_occupancy),
+      my_occupancy:    normPct(row.my_occupancy),
       my_adr:          parseNum(row.my_adr),
       my_revpar:       parseNum(row.my_revpar),
-      comp_set_occ:    parseNum(row.comp_set_occ),
+      comp_set_occ:    normPct(row.comp_set_occ),
       comp_set_adr:    parseNum(row.comp_set_adr),
       comp_set_revpar: parseNum(row.comp_set_revpar),
       occ_index:       parseNum(row.occ_index),
@@ -252,7 +258,7 @@ async function saveData(importType, assetId, editedData) {
       quarter,
       year:             date.getFullYear(),
       appraised_value:  parseNum(d.appraised_value),
-      cap_rate_applied: parseNum(d.cap_rate_applied),
+      cap_rate_applied: normPct(d.cap_rate_applied),
       noi_trailing:     parseNum(d.noi_used),
       equity_value:     parseNum(d.equity_value),
       valuation_notes:  d.notes || null,
@@ -263,8 +269,6 @@ async function saveData(importType, assetId, editedData) {
 
   if (importType === 'loan') {
     const d = editedData
-    // Normalize percentage fields: if value looks like a decimal (< 1), convert to percentage
-    const normPct = (v) => { const n = parseNum(v); return n !== null && n < 1 ? n * 100 : n }
     const { error } = await supabase.from('asset_debt').insert({
       asset_id:               assetId,
       lender:                 d.lender || null,
@@ -288,11 +292,11 @@ async function saveData(importType, assetId, editedData) {
     const d = editedData
     const { error } = await supabase.from('assets').update({
       franchise_expiry:    d.franchise_expiry    || null,
-      franchise_fee_pct:   parseNum(d.franchise_fee_pct),
+      franchise_fee_pct:   normPct(d.franchise_fee_pct),
       pip_cost_estimate:   parseNum(d.pip_cost_estimate),
       pip_deadline:        d.pip_deadline        || null,
       management_company:  d.management_company  || null,
-      management_fee_pct:  parseNum(d.management_fee_pct),
+      management_fee_pct:  normPct(d.management_fee_pct),
       mgmt_contract_expiry: d.mgmt_contract_expiry || null,
     }).eq('id', assetId)
     if (error) throw error
