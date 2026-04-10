@@ -21,6 +21,7 @@ import IRRDashboard from './pages/IRRDashboard'
 import BudgetVsActual from './pages/BudgetVsActual'
 import KeyDates from './pages/KeyDates'
 import Import from './pages/Import'
+import Integrations from './pages/Integrations'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="/reports" element={<ProtectedRoute><Reports/></ProtectedRoute>}/>
           <Route path="/data" element={<ProtectedRoute><DataHub/></ProtectedRoute>}/>
           <Route path="/import" element={<ProtectedRoute><Import/></ProtectedRoute>}/>
+          <Route path="/integrations" element={<ProtectedRoute><Integrations/></ProtectedRoute>}/>
           <Route path="*" element={<Navigate to="/" replace/>}/>
         </Routes>
       </BrowserRouter>

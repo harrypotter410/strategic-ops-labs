@@ -1,5 +1,13 @@
 import { useState, useRef } from 'react'
+import { supabase } from '../lib/supabase'
 import { useAssets, useFinancials } from '../hooks/useData'
+
+const VALID_TYPES = ['hotel', 'resort', 'mixed', 'commercial']
+const VALID_STATUSES = ['active', 'renovation', 'review', 'disposed']
+
+const toNull = (v) => (!v || String(v).trim() === '') ? null : String(v).trim()
+const toNum = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n }
+const toInt = (v) => { const n = parseInt(v, 10); return isNaN(n) ? null : n }
 
 const TEMPLATES = [
   { name: 'Asset List', desc: 'name, type, market, rooms, status, brand, year_acquired, acquisition_price, current_value', file: 'assets_template.csv' },
@@ -69,16 +77,67 @@ export default function Upload() {
       const reader = new FileReader()
       reader.onload = async (e) => {
         const rows = parseCSV(e.target.result)
+        let success = 0, failed = 0, skipped = 0
+        const errors = []
+
         if (dataType === 'assets') {
           for (const row of rows) {
-            await addAsset({ name: row.name, type: row.type, market: row.market, rooms: Number(row.rooms) || null, status: row.status || 'active', brand: row.brand || null, year_acquired: Number(row.year_acquired) || null, acquisition_price: Number(row.acquisition_price) || null, current_value: Number(row.current_value) || null })
+            if (!toNull(row.name)) { skipped++; continue }
+            const assetData = {
+              name: row.name.trim(),
+              type: VALID_TYPES.includes(toNull(row.type)) ? row.type.trim() : 'hotel',
+              market: toNull(row.market) || 'Unknown',
+              rooms: toInt(row.rooms),
+              status: VALID_STATUSES.includes(toNull(row.status)) ? row.status.trim() : 'active',
+              brand: toNull(row.brand),
+              year_acquired: toInt(row.year_acquired),
+              acquisition_price: toNum(row.acquisition_price),
+              current_value: toNum(row.current_value),
+            }
+            const { error } = await addAsset(assetData)
+            if (error) { failed++; errors.push(`"${row.name}": ${error.message}`) }
+            else success++
           }
         } else {
-          setStatus({ type: 'info', msg: 'Financial import requires asset IDs. Use the API or manual entry for now.' })
-          return
+          // Look up asset IDs by name
+          const { data: allAssets, error: assetErr } = await supabase.from('assets').select('id, name')
+          if (assetErr) { setStatus({ type: 'error', msg: `Could not load assets: ${assetErr.message}` }); return }
+          const assetMap = Object.fromEntries((allAssets || []).map(a => [a.name.toLowerCase(), a.id]))
+
+          const finRows = []
+          for (const row of rows) {
+            const assetId = assetMap[toNull(row.asset_name)?.toLowerCase()]
+            if (!assetId || !toInt(row.period_month) || !toInt(row.period_year)) { skipped++; continue }
+            finRows.push({
+              asset_id: assetId,
+              period_month: toInt(row.period_month),
+              period_year: toInt(row.period_year),
+              revenue: toNum(row.revenue),
+              gop: toNum(row.gop),
+              noi: toNum(row.noi),
+              ebitda: toNum(row.ebitda),
+              rooms_available: toInt(row.rooms_available),
+              rooms_sold: toInt(row.rooms_sold),
+              occupancy: toNum(row.occupancy),
+              adr: toNum(row.adr),
+              revpar: toNum(row.revpar),
+            })
+          }
+          if (finRows.length > 0) {
+            const { error } = await addFinancials(finRows)
+            if (error) { setStatus({ type: 'error', msg: `Import failed: ${error.message}` }); return }
+            success = finRows.length
+          }
+          skipped = rows.length - finRows.length
         }
-        setStatus({ type: 'success', msg: `Imported ${rows.length} rows successfully.` })
-        setFile(null); setPreview(null)
+
+        const parts = []
+        if (success > 0) parts.push(`${success} imported`)
+        if (failed > 0) parts.push(`${failed} failed`)
+        if (skipped > 0) parts.push(`${skipped} skipped (missing required fields)`)
+        const msg = parts.join(', ') + '.' + (errors.length > 0 ? ' ' + errors.slice(0, 2).join('; ') : '')
+        setStatus({ type: failed > 0 ? 'error' : 'success', msg })
+        if (failed === 0) { setFile(null); setPreview(null) }
       }
       reader.readAsText(file)
     } catch (err) {

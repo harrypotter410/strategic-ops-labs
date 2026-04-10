@@ -19,7 +19,7 @@ const SYSTEM_PROMPTS = {
   pl: 'You are extracting hotel financial data from an operator P&L report. Return ONLY a JSON array where each element has: property_name, period_month (1-12), period_year (4 digits), revenue (number in dollars), gop (gross operating profit, number), noi (net operating income, number), occupancy (percentage as decimal e.g. 0.78), adr (average daily rate, number), revpar (number). If a field is not found return null. Return only valid JSON, no other text.',
   str: 'You are extracting hotel competitive benchmarking data from an STR report. Return ONLY a JSON array where each element has: property_name, period_month (1-12), period_year (4 digits), my_occupancy (decimal), my_adr (number), my_revpar (number), comp_set_occ (decimal), comp_set_adr (number), comp_set_revpar (number), occ_index (MPI, number e.g. 107.3), adr_index (ARI, number), revpar_index (RGI, number). Return only valid JSON, no other text.',
   appraisal: 'You are extracting data from a real estate appraisal report. Return ONLY a JSON object with: property_name, valuation_date (YYYY-MM-DD), appraised_value (number in dollars), cap_rate_applied (percentage as decimal e.g. 0.065), noi_used (number), equity_value (number or null), notes (brief string summarizing key findings, max 200 chars). Return only valid JSON, no other text.',
-  loan: 'You are extracting data from a commercial real estate loan document or term sheet. Return ONLY a JSON object with: property_name, lender, loan_type (one of: senior, mezzanine, bridge, permanent, construction, preferred_equity), original_balance (number), current_balance (number or null), interest_rate (percentage as decimal), rate_type (fixed or floating), maturity_date (YYYY-MM-DD), annual_debt_service (number or null), ltv (percentage as decimal or null), covenant_dscr_min (number or null), covenant_ltv_max (decimal or null), covenant_occupancy_min (decimal or null). Return only valid JSON, no other text.',
+  loan: 'You are extracting data from a commercial real estate loan document or term sheet. Return ONLY a JSON object with: property_name, lender, loan_type (one of: senior, mezzanine, bridge, permanent, construction, preferred_equity), original_balance (number), current_balance (number or null), interest_rate (percentage as a number e.g. 5.75 for 5.75%, NOT 0.0575), rate_type (fixed or floating), maturity_date (YYYY-MM-DD), annual_debt_service (number or null), ltv (percentage as a number e.g. 65 for 65%, NOT 0.65, or null), covenant_dscr_min (number or null), covenant_ltv_max (percentage as a number e.g. 75 for 75%, or null), covenant_occupancy_min (percentage as a number e.g. 60 for 60%, or null). Return only valid JSON, no other text.',
   franchise: 'You are extracting data from a hotel franchise agreement or management contract. Return ONLY a JSON object with: property_name, franchise_expiry (YYYY-MM-DD or null), franchise_fee_pct (decimal or null), pip_cost_estimate (number in dollars or null), pip_deadline (YYYY-MM-DD or null), management_company (string or null), management_fee_pct (decimal or null), mgmt_contract_expiry (YYYY-MM-DD or null). Return only valid JSON, no other text.',
 }
 
@@ -67,14 +67,14 @@ const FIELD_DEFS = {
     { key: 'loan_type',              label: 'Loan Type' },
     { key: 'original_balance',       label: 'Original Balance ($)' },
     { key: 'current_balance',        label: 'Current Balance ($)' },
-    { key: 'interest_rate',          label: 'Interest Rate (decimal)' },
+    { key: 'interest_rate',          label: 'Interest Rate (%, e.g. 5.75)' },
     { key: 'rate_type',              label: 'Rate Type (fixed/floating)' },
     { key: 'maturity_date',          label: 'Maturity Date (YYYY-MM-DD)' },
     { key: 'annual_debt_service',    label: 'Annual Debt Service ($)' },
-    { key: 'ltv',                    label: 'LTV (decimal)' },
+    { key: 'ltv',                    label: 'LTV (%, e.g. 65)' },
     { key: 'covenant_dscr_min',      label: 'DSCR Min Covenant' },
-    { key: 'covenant_ltv_max',       label: 'LTV Max Covenant (decimal)' },
-    { key: 'covenant_occupancy_min', label: 'Occ Min Covenant (decimal)' },
+    { key: 'covenant_ltv_max',       label: 'LTV Max Covenant (%, e.g. 75)' },
+    { key: 'covenant_occupancy_min', label: 'Occ Min Covenant (%, e.g. 60)' },
   ],
   franchise: [
     { key: 'property_name',       label: 'Property Name' },
@@ -263,20 +263,22 @@ async function saveData(importType, assetId, editedData) {
 
   if (importType === 'loan') {
     const d = editedData
+    // Normalize percentage fields: if value looks like a decimal (< 1), convert to percentage
+    const normPct = (v) => { const n = parseNum(v); return n !== null && n < 1 ? n * 100 : n }
     const { error } = await supabase.from('asset_debt').insert({
       asset_id:               assetId,
       lender:                 d.lender || null,
       loan_type:              d.loan_type || null,
       original_balance:       parseNum(d.original_balance),
       current_balance:        parseNum(d.current_balance),
-      interest_rate:          parseNum(d.interest_rate),
+      interest_rate:          normPct(d.interest_rate),
       rate_type:              d.rate_type || null,
       maturity_date:          d.maturity_date || null,
       debt_service_annual:    parseNum(d.annual_debt_service),
-      ltv:                    parseNum(d.ltv),
+      ltv:                    normPct(d.ltv),
       covenant_dscr_min:      parseNum(d.covenant_dscr_min),
-      covenant_ltv_max:       parseNum(d.covenant_ltv_max),
-      covenant_occupancy_min: parseNum(d.covenant_occupancy_min),
+      covenant_ltv_max:       normPct(d.covenant_ltv_max),
+      covenant_occupancy_min: normPct(d.covenant_occupancy_min),
     })
     if (error) throw error
     return { desc: 'Debt record', table: 'asset_debt' }
