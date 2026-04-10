@@ -97,7 +97,7 @@ export default function AssetDetail() {
   const [capex, setCapex] = useState([])
   const [roomTypes, setRoomTypes] = useState([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('overview')
+  const [tab, setTab] = useState('performance')
   const [saving, setSaving] = useState(false)
 
   // ── CapEx form state ──
@@ -278,15 +278,15 @@ export default function AssetDetail() {
 
       {/* ── Tabs ── */}
       <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
-        {[['overview','Overview'],['exit','Exit & Returns'],['hotel','Hotel Profile'],['capex','CapEx & PIP']].map(([t,l])=>(
+        {[['performance','Performance'],['hotel','Hotel Profile'],['capex','CapEx & PIP']].map(([t,l])=>(
           <button key={t} style={tabStyle(t)} onClick={()=>setTab(t)}>{l}</button>
         ))}
       </div>
 
-      {/* ══ OVERVIEW TAB ══ */}
-      {tab==='overview'&&(
+      {/* ══ PERFORMANCE TAB (Overview + Exit & Returns merged) ══ */}
+      {tab==='performance'&&(
         <div>
-          {/* Top KPI cards */}
+          {/* Top KPI row */}
           <div className="kpi-grid" style={{marginBottom:20}}>
             <KPICard label="Acquisition Price" value={fmtM(asset.acquisition_price)}/>
             <KPICard
@@ -299,8 +299,8 @@ export default function AssetDetail() {
             <KPICard label="DSCR" value={dscr?`${dscr}x`:null} sub="NOI / Debt Service" color={dscr?(parseFloat(dscr)>=1.25?'var(--g600)':parseFloat(dscr)>=1?'var(--amber)':'var(--red)'):undefined}/>
           </div>
 
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
-            {/* Investment fields */}
+          {/* Investment fields + Notes */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
             <div className="card" style={{marginBottom:0}}>
               <div className="card-header">
                 <span className="card-title">Investment fields</span>
@@ -332,9 +332,8 @@ export default function AssetDetail() {
               </div>
             </div>
 
-            {/* Notes */}
             <div>
-              <div className="card" style={{marginBottom:0}}>
+              <div className="card" style={{marginBottom:16}}>
                 <div className="card-header"><span className="card-title">Notes</span></div>
                 <textarea
                   className="form-input"
@@ -345,16 +344,40 @@ export default function AssetDetail() {
                   placeholder="Investment thesis, key highlights, watch items..."
                 />
               </div>
+
+              {/* Live return preview — right column, below notes */}
+              <div className="card" style={{marginBottom:0}}>
+                <div className="card-header"><span className="card-title">Return preview</span></div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+                  <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:8,padding:'12px 14px'}}>
+                    <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Proj. IRR</div>
+                    <div style={{fontSize:26,fontFamily:'Playfair Display,serif',fontWeight:700,color:projIRR?(projIRR>=15?'var(--g600)':projIRR>=12?'var(--amber)':'var(--red)'):'var(--gray400)'}}>
+                      {projIRR?`${projIRR}%`:'—'}
+                    </div>
+                    <div style={{fontSize:9,color:'var(--gray400)',marginTop:2}}>auto-calculated</div>
+                  </div>
+                  <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
+                    <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Equity Multiple</div>
+                    <div style={{fontSize:26,fontFamily:'Playfair Display,serif',fontWeight:700,color:'var(--g900)'}}>{equityMultiple?`${equityMultiple}x`:'—'}</div>
+                  </div>
+                  <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
+                    <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Levered YOC</div>
+                    <div style={{fontSize:22,fontFamily:'Playfair Display,serif',fontWeight:600,color:'var(--g900)'}}>{levYoc?`${levYoc}%`:'—'}</div>
+                    <div style={{fontSize:9,color:'var(--gray400)',marginTop:2}}>(NOI-DS) / Acq. Price</div>
+                  </div>
+                  <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
+                    <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Years to Exit</div>
+                    <div style={{fontSize:22,fontFamily:'Playfair Display,serif',fontWeight:600,color:yearsToExit!==null&&yearsToExit<=0?'var(--red)':yearsToExit!==null&&yearsToExit<=2?'var(--amber)':'var(--g900)'}}>
+                      {yearsToExit!==null?(yearsToExit<0?`${Math.abs(yearsToExit)}y past`:`${yearsToExit}y`):'—'}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ══ EXIT & RETURNS TAB ══ */}
-      {tab==='exit'&&(
-        <div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
-            {/* Exit assumptions — inline edit */}
+          {/* Exit assumptions + UW vs Actual */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
             <div className="card" style={{marginBottom:0}}>
               <div className="card-header">
                 <span className="card-title">Exit assumptions</span>
@@ -378,139 +401,49 @@ export default function AssetDetail() {
               </div>
             </div>
 
-            {/* Live preview panel */}
             <div className="card" style={{marginBottom:0}}>
-              <div className="card-header"><span className="card-title">Live return preview</span></div>
-
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-                <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:8,padding:'12px 14px'}}>
-                  <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Proj. IRR</div>
-                  <div style={{fontSize:26,fontFamily:'Playfair Display,serif',fontWeight:700,color:projIRR?(projIRR>=15?'var(--g600)':projIRR>=12?'var(--amber)':'var(--red)'):'var(--gray400)'}}>
-                    {projIRR?`${projIRR}%`:'—'}
-                  </div>
-                  <div style={{fontSize:9,color:'var(--gray400)',marginTop:2}}>auto-calculated</div>
-                </div>
-                <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
-                  <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Equity Multiple</div>
-                  <div style={{fontSize:26,fontFamily:'Playfair Display,serif',fontWeight:700,color:'var(--g900)'}}>{equityMultiple?`${equityMultiple}x`:'—'}</div>
-                </div>
-                <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
-                  <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Levered YOC</div>
-                  <div style={{fontSize:22,fontFamily:'Playfair Display,serif',fontWeight:600,color:'var(--g900)'}}>{levYoc?`${levYoc}%`:'—'}</div>
-                  <div style={{fontSize:9,color:'var(--gray400)',marginTop:2}}>(NOI-DS) / Acq. Price</div>
-                </div>
-                <div style={{background:'var(--gray50)',border:'1px solid var(--gray100)',borderRadius:8,padding:'12px 14px'}}>
-                  <div style={{fontSize:9,color:'var(--gray500)',textTransform:'uppercase',letterSpacing:'.04em',marginBottom:4}}>Years to Exit</div>
-                  <div style={{fontSize:22,fontFamily:'Playfair Display,serif',fontWeight:600,color:yearsToExit!==null&&yearsToExit<=0?'var(--red)':yearsToExit!==null&&yearsToExit<=2?'var(--amber)':'var(--g900)'}}>
-                    {yearsToExit!==null?(yearsToExit<0?`${Math.abs(yearsToExit)}y past`:`${yearsToExit}y`):'—'}
-                  </div>
-                </div>
+              <div className="card-header">
+                <span className="card-title">Underwriting vs. Actual</span>
+                <span style={{fontSize:10,color:'var(--gray500)'}}>Click underwritten values to edit</span>
               </div>
-
-              <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:8,padding:'10px 14px',fontSize:11,color:'var(--g700)',lineHeight:1.7}}>
-                <strong>How IRR is calculated:</strong><br/>
-                Projected IRR = discount rate where NPV of (annual CFs + exit proceeds) = $0.<br/>
-                Annual CF = NOI - Debt Service. Hold years = Target Exit Year - Year Acquired
+              <div style={{overflowX:'auto'}}>
+                <table className="data-table">
+                  <thead>
+                    <tr><th>Metric</th><th>Underwritten</th><th>Actual</th><th>Variance</th></tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const rows = [
+                        { label:'Purchase Price', uwField:'uw_purchase_price', actual: asset.acquisition_price ? parseFloat(asset.acquisition_price) : null, format:fmtM, type:'number', prefix:'$', noVariance:true },
+                        { label:'NOI', uwField:'uw_noi', actual: asset.noi_trailing ? parseFloat(asset.noi_trailing) : null, format:fmtM, type:'number', prefix:'$' },
+                        { label:'Occupancy', uwField:'uw_occupancy', actual:null, format:v=>v?`${parseFloat(v).toFixed(1)}%`:'—', type:'number', suffix:'%' },
+                        { label:'ADR', uwField:'uw_adr', actual:null, format:v=>v?`$${parseFloat(v).toFixed(0)}`:'—', type:'number', prefix:'$' },
+                        { label:'Exit Cap Rate', uwField:'uw_exit_cap_rate', actual:null, format:v=>v?`${parseFloat(v).toFixed(2)}%`:'—', type:'number', suffix:'%', noVariance:true },
+                      ]
+                      return rows.map(row => {
+                        const uw = asset[row.uwField] ? parseFloat(asset[row.uwField]) : null
+                        const act = row.actual
+                        let variance = null, varianceStr = '—', varianceColor = 'var(--gray500)'
+                        if (!row.noVariance && uw && act) {
+                          variance = act - uw
+                          const variancePct = uw !== 0 ? ((variance/uw)*100).toFixed(1) : 0
+                          const sign = variance>=0?'+':''
+                          varianceStr = `${sign}${row.format(Math.abs(variance)).replace('—','')} (${sign}${variancePct}%)`
+                          varianceColor = variance>=0?'var(--g600)':'var(--red)'
+                        }
+                        return (
+                          <tr key={row.uwField}>
+                            <td style={{fontWeight:500}}>{row.label}</td>
+                            <td><EditField label={row.label} value={asset[row.uwField]} onSave={v=>updateField(row.uwField,v)} type={row.type} prefix={row.prefix||''} suffix={row.suffix||''}/></td>
+                            <td style={{color:'var(--gray700)'}}>{act!==null?row.format(act):'—'}</td>
+                            <td style={{color:varianceColor,fontWeight:variance?500:400}}>{varianceStr}</td>
+                          </tr>
+                        )
+                      })
+                    })()}
+                  </tbody>
+                </table>
               </div>
-            </div>
-          </div>
-
-          {/* ── Underwriting vs. Actual ── */}
-          <div className="card" style={{marginTop:16}}>
-            <div className="card-header">
-              <span className="card-title">Underwriting vs. Actual</span>
-              <span style={{fontSize:10,color:'var(--gray500)'}}>Click underwritten values to edit</span>
-            </div>
-            <div style={{overflowX:'auto'}}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Metric</th>
-                    <th>Underwritten</th>
-                    <th>Actual</th>
-                    <th>Variance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const rows = [
-                      {
-                        label: 'Purchase Price',
-                        uwField: 'uw_purchase_price',
-                        actual: asset.acquisition_price ? parseFloat(asset.acquisition_price) : null,
-                        format: fmtM,
-                        type: 'number',
-                        prefix: '$',
-                        noVariance: true,
-                      },
-                      {
-                        label: 'NOI',
-                        uwField: 'uw_noi',
-                        actual: asset.noi_trailing ? parseFloat(asset.noi_trailing) : null,
-                        format: fmtM,
-                        type: 'number',
-                        prefix: '$',
-                      },
-                      {
-                        label: 'Occupancy',
-                        uwField: 'uw_occupancy',
-                        actual: null,
-                        format: v => v ? `${parseFloat(v).toFixed(1)}%` : '—',
-                        type: 'number',
-                        suffix: '%',
-                      },
-                      {
-                        label: 'ADR',
-                        uwField: 'uw_adr',
-                        actual: null,
-                        format: v => v ? `$${parseFloat(v).toFixed(0)}` : '—',
-                        type: 'number',
-                        prefix: '$',
-                      },
-                      {
-                        label: 'Exit Cap Rate',
-                        uwField: 'uw_exit_cap_rate',
-                        actual: null,
-                        format: v => v ? `${parseFloat(v).toFixed(2)}%` : '—',
-                        type: 'number',
-                        suffix: '%',
-                        noVariance: true,
-                      },
-                    ]
-                    return rows.map(row => {
-                      const uw = asset[row.uwField] ? parseFloat(asset[row.uwField]) : null
-                      const act = row.actual
-                      let variance = null
-                      let varianceStr = '—'
-                      let varianceColor = 'var(--gray500)'
-                      if (!row.noVariance && uw && act) {
-                        variance = act - uw
-                        const variancePct = uw !== 0 ? ((variance / uw) * 100).toFixed(1) : 0
-                        const sign = variance >= 0 ? '+' : ''
-                        varianceStr = `${sign}${row.format(Math.abs(variance)).replace('—','')} (${sign}${variancePct}%)`
-                        varianceColor = variance >= 0 ? 'var(--g600)' : 'var(--red)'
-                      }
-                      return (
-                        <tr key={row.uwField}>
-                          <td style={{fontWeight:500}}>{row.label}</td>
-                          <td>
-                            <EditField
-                              label={row.label}
-                              value={asset[row.uwField]}
-                              onSave={v => updateField(row.uwField, v)}
-                              type={row.type}
-                              prefix={row.prefix || ''}
-                              suffix={row.suffix || ''}
-                            />
-                          </td>
-                          <td style={{color:'var(--gray700)'}}>{act !== null ? row.format(act) : '—'}</td>
-                          <td style={{color:varianceColor,fontWeight:variance?500:400}}>{varianceStr}</td>
-                        </tr>
-                      )
-                    })
-                  })()}
-                </tbody>
-              </table>
             </div>
           </div>
         </div>
