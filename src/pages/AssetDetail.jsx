@@ -454,7 +454,7 @@ export default function AssetDetail() {
                       {
                         label: 'Occupancy',
                         uwField: 'uw_occupancy',
-                        actual: latestFinancial?.occupancy ? parseFloat(latestFinancial.occupancy) : null,
+                        actual: null,
                         format: v => v ? `${parseFloat(v).toFixed(1)}%` : '—',
                         type: 'number',
                         suffix: '%',
@@ -462,7 +462,7 @@ export default function AssetDetail() {
                       {
                         label: 'ADR',
                         uwField: 'uw_adr',
-                        actual: latestFinancial?.adr ? parseFloat(latestFinancial.adr) : null,
+                        actual: null,
                         format: v => v ? `$${parseFloat(v).toFixed(0)}` : '—',
                         type: 'number',
                         prefix: '$',
