@@ -32,14 +32,56 @@ function covenantColor(status) {
   return { color:'var(--gray500)', bg:'var(--gray100)', icon:'—' }
 }
 
+// Compute covenant actuals from T12 financials for a given loan
+function computedCovenantActuals(loan, t12ByAsset) {
+  const t12 = t12ByAsset[loan.asset_id]
+  if (!t12) return {}
+  const out = {}
+  // DSCR = T12 NOI / annual debt service
+  if (t12.noi && loan.debt_service_annual)
+    out.covenant_dscr_actual = parseFloat((t12.noi / parseFloat(loan.debt_service_annual)).toFixed(2))
+  // Occupancy = T12 avg occupancy
+  if (t12.occ)
+    out.covenant_occupancy_actual = parseFloat(t12.occ.toFixed(1))
+  // Interest Coverage = T12 NOI / (rate% * balance)
+  if (t12.noi && loan.interest_rate && loan.current_balance) {
+    const interest = (parseFloat(loan.interest_rate) / 100) * parseFloat(loan.current_balance)
+    if (interest > 0) out.covenant_interest_coverage_actual = parseFloat((t12.noi / interest).toFixed(2))
+  }
+  // Debt Yield = T12 NOI / loan balance * 100
+  if (t12.noi && loan.current_balance)
+    out.covenant_debt_yield_actual = parseFloat(((t12.noi / parseFloat(loan.current_balance)) * 100).toFixed(2))
+  return out
+}
+
 function useDebt() {
   const [debt, setDebt] = useState([])
+  const [t12ByAsset, setT12ByAsset] = useState({})
   const [loading, setLoading] = useState(true)
 
   const fetch = async () => {
     setLoading(true)
-    const { data } = await supabase.from('asset_debt').select('*').order('maturity_date',{ascending:true})
-    setDebt(data||[])
+    const [{ data: debtData }, { data: finData }] = await Promise.all([
+      supabase.from('asset_debt').select('*').order('maturity_date',{ascending:true}),
+      supabase.from('financials').select('asset_id,noi,occupancy,adr,period_year,period_month').order('period_year',{ascending:false}).order('period_month',{ascending:false}),
+    ])
+    setDebt(debtData||[])
+    // Build T12 map: asset_id → { noi, occ, adr }
+    const byAsset = {}
+    for (const row of (finData||[])) {
+      if (!byAsset[row.asset_id]) byAsset[row.asset_id] = []
+      if (byAsset[row.asset_id].length < 12) byAsset[row.asset_id].push(row)
+    }
+    const t12 = {}
+    for (const [assetId, rows] of Object.entries(byAsset)) {
+      if (rows.length === 0) continue
+      t12[assetId] = {
+        noi: rows.reduce((s,r) => s + (parseFloat(r.noi)||0), 0),
+        occ: rows.reduce((s,r) => s + (parseFloat(r.occupancy)||0), 0) / rows.length,
+        adr: rows.reduce((s,r) => s + (parseFloat(r.adr)||0), 0) / rows.length,
+      }
+    }
+    setT12ByAsset(t12)
     setLoading(false)
   }
   useEffect(()=>{fetch()},[])
@@ -56,7 +98,7 @@ function useDebt() {
     }
   }
   const remove = async (id) => { await supabase.from('asset_debt').delete().eq('id',id); setDebt(prev=>prev.filter(d=>d.id!==id)) }
-  return { debt, loading, save, remove, refetch: fetch }
+  return { debt, t12ByAsset, loading, save, remove, refetch: fetch }
 }
 
 function daysUntilMaturity(date) {
@@ -219,7 +261,7 @@ function DebtModal({ debt, assets, onClose, onSave }) {
 }
 
 export default function DebtTracker() {
-  const { debt, loading, save, remove } = useDebt()
+  const { debt, t12ByAsset, loading, save, remove } = useDebt()
   const { assets } = useAssets()
   const [modal, setModal] = useState(null)
   const [deleteId, setDeleteId] = useState(null)
@@ -230,8 +272,10 @@ export default function DebtTracker() {
   const totalDebt = debt.reduce((s,d)=>s+(parseFloat(d.current_balance)||0),0)
   const totalDS = debt.reduce((s,d)=>s+(parseFloat(d.debt_service_annual)||0),0)
   const avgRate = debt.filter(d=>d.interest_rate).length ? (debt.filter(d=>d.interest_rate).reduce((s,d)=>s+parseFloat(d.interest_rate),0)/debt.filter(d=>d.interest_rate).length).toFixed(2) : null
-  const allBreaches = debt.flatMap(loan=>COVENANTS.filter(c=>covenantStatus(c,loan)==='breach').map(c=>({loan,cov:c})))
-  const allWarnings = debt.flatMap(loan=>COVENANTS.filter(c=>covenantStatus(c,loan)==='warning').map(c=>({loan,cov:c})))
+  // Merge computed actuals (from ProfitSword T12) over stored actuals for each loan
+  const loanWithActuals = (loan) => ({ ...loan, ...computedCovenantActuals(loan, t12ByAsset) })
+  const allBreaches = debt.flatMap(loan=>COVENANTS.filter(c=>covenantStatus(c,loanWithActuals(loan))==='breach').map(c=>({loan:loanWithActuals(loan),cov:c})))
+  const allWarnings = debt.flatMap(loan=>COVENANTS.filter(c=>covenantStatus(c,loanWithActuals(loan))==='warning').map(c=>({loan:loanWithActuals(loan),cov:c})))
 
   if (loading) return <div className="loading">Loading debt tracker...</div>
 
@@ -291,12 +335,14 @@ export default function DebtTracker() {
         ):(
           <div>
             {filtered.map(d=>{
+              const dl=loanWithActuals(d)
               const days=daysUntilMaturity(d.maturity_date)
               const urgent=days!==null&&days<=180
               const warn=days!==null&&days<=365&&days>180
-              const breachCount=COVENANTS.filter(c=>covenantStatus(c,d)==='breach').length
-              const warnCount=COVENANTS.filter(c=>covenantStatus(c,d)==='warning').length
+              const breachCount=COVENANTS.filter(c=>covenantStatus(c,dl)==='breach').length
+              const warnCount=COVENANTS.filter(c=>covenantStatus(c,dl)==='warning').length
               const isExpanded=expandedId===d.id
+              const hasT12=!!t12ByAsset[d.asset_id]
 
               return (
                 <div key={d.id} style={{borderBottom:'1px solid var(--gray100)'}}>
@@ -344,22 +390,26 @@ export default function DebtTracker() {
                           <span style={{fontWeight:500}}>{d.prepayment_structure&&d.prepayment_structure!=='none'?d.prepayment_structure.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase()):'None'}</span>
                         </div>
                       </div>
-                      <div style={{fontSize:11,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--gray500)',marginTop:12,marginBottom:8}}>Covenants</div>
-                      {!COVENANTS.some(c=>d[c.minField]||d[c.actualField])?(
-                        <div style={{fontSize:12,color:'var(--gray500)',marginBottom:8}}>No covenant data. Click Edit → Covenants tab to add.</div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:12,marginBottom:8}}>
+                        <span style={{fontSize:11,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--gray500)'}}>Covenants</span>
+                        {hasT12&&<span style={{fontSize:9,background:'var(--g100)',color:'var(--g600)',padding:'1px 6px',borderRadius:4,fontWeight:600}}>⚡ Actuals from ProfitSword</span>}
+                      </div>
+                      {!COVENANTS.some(c=>dl[c.minField]||dl[c.actualField])?(
+                        <div style={{fontSize:12,color:'var(--gray500)',marginBottom:8}}>No covenant data. Click Edit → Covenants tab to add thresholds.</div>
                       ):(
                         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:8}}>
-                          {COVENANTS.filter(c=>d[c.minField]||d[c.actualField]).map(cov=>{
-                            const st=covenantStatus(cov,d)
+                          {COVENANTS.filter(c=>dl[c.minField]||dl[c.actualField]).map(cov=>{
+                            const st=covenantStatus(cov,dl)
                             const {color,bg,icon}=covenantColor(st)
+                            const isComputed=!!computedCovenantActuals(d,t12ByAsset)[cov.actualField]
                             return (
                               <div key={cov.key} style={{background:bg,border:`1px solid ${color}30`,borderRadius:8,padding:'10px 12px'}}>
                                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                                  <span style={{fontSize:10,fontWeight:600,color,textTransform:'uppercase',letterSpacing:'.05em'}}>{cov.label}</span>
+                                  <span style={{fontSize:10,fontWeight:600,color,textTransform:'uppercase',letterSpacing:'.05em'}}>{cov.label}{isComputed&&<span style={{fontSize:8,marginLeft:4,opacity:.7}}>⚡</span>}</span>
                                   <span style={{fontSize:13}}>{icon}</span>
                                 </div>
-                                <div style={{fontSize:16,fontWeight:700,color}}>{cov.format(d[cov.actualField])}</div>
-                                <div style={{fontSize:10,color:'rgba(0,0,0,0.4)',marginTop:2}}>req. {cov.format(d[cov.minField])}</div>
+                                <div style={{fontSize:16,fontWeight:700,color}}>{cov.format(dl[cov.actualField])}</div>
+                                <div style={{fontSize:10,color:'rgba(0,0,0,0.4)',marginTop:2}}>req. {cov.format(dl[cov.minField])}</div>
                                 {st==='breach'&&<div style={{fontSize:10,color,marginTop:4,fontWeight:500}}>⚠ BREACH</div>}
                                 {st==='warning'&&<div style={{fontSize:10,color,marginTop:4}}>Approaching limit</div>}
                               </div>

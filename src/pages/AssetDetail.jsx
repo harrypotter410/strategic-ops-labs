@@ -99,6 +99,7 @@ export default function AssetDetail() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('performance')
   const [saving, setSaving] = useState(false)
+  const [t12, setT12] = useState(null) // { noi, occ, adr } from ProfitSword financials
 
   // ── CapEx form state ──
   const [capexForm, setCapexForm] = useState({ year: currentYear, category:'FF&E', amount:'', brand_required:false, description:'' })
@@ -118,11 +119,20 @@ export default function AssetDetail() {
       supabase.from('assets').select('*').eq('id', id).single(),
       supabase.from('asset_capex').select('*').eq('asset_id', id).order('year',{ascending:false}),
       supabase.from('room_types').select('*').eq('asset_id', id).order('room_type'),
-    ]).then(([a, cx, rt]) => {
+      supabase.from('financials').select('noi,occupancy,adr,period_year,period_month').eq('asset_id', id).order('period_year',{ascending:false}).order('period_month',{ascending:false}).limit(12),
+    ]).then(([a, cx, rt, fin]) => {
       if (a.error || !a.data) { navigate('/assets'); return }
       setAsset(a.data)
       setCapex(cx.data||[])
       setRoomTypes(rt.data||[])
+      // Compute T12 from ProfitSword financials if available
+      const rows = fin.data || []
+      if (rows.length > 0) {
+        const noi = rows.reduce((s,r) => s + (parseFloat(r.noi)||0), 0)
+        const occ = rows.reduce((s,r) => s + (parseFloat(r.occupancy)||0), 0) / rows.length
+        const adr = rows.reduce((s,r) => s + (parseFloat(r.adr)||0), 0) / rows.length
+        setT12({ noi, occ, adr, months: rows.length })
+      }
       setLoading(false)
     })
   }, [id])
@@ -204,17 +214,23 @@ export default function AssetDetail() {
   if (!asset) return null
 
   // ── Derived metrics ──
+  // T12 NOI from ProfitSword takes precedence over manually-entered noi_trailing
+  const effectiveNoi = t12?.noi ?? (asset.noi_trailing ? parseFloat(asset.noi_trailing) : null)
+  const noiIsLive = !!t12?.noi
+
   const gain = asset.current_value&&asset.acquisition_price ? parseFloat(asset.current_value)-parseFloat(asset.acquisition_price) : null
   const gainPct = gain&&asset.acquisition_price ? ((gain/parseFloat(asset.acquisition_price))*100).toFixed(1) : null
-  const yoc = asset.noi_trailing&&asset.acquisition_price ? ((parseFloat(asset.noi_trailing)/parseFloat(asset.acquisition_price))*100).toFixed(2) : null
-  const levYoc = asset.noi_trailing&&asset.debt_service_annual&&asset.acquisition_price ? (((parseFloat(asset.noi_trailing)-parseFloat(asset.debt_service_annual))/parseFloat(asset.acquisition_price))*100).toFixed(2) : null
-  const dscr = asset.noi_trailing&&asset.debt_service_annual ? (parseFloat(asset.noi_trailing)/parseFloat(asset.debt_service_annual)).toFixed(2) : null
+  const yoc = effectiveNoi&&asset.acquisition_price ? ((effectiveNoi/parseFloat(asset.acquisition_price))*100).toFixed(2) : null
+  const levYoc = effectiveNoi&&asset.debt_service_annual&&asset.acquisition_price ? (((effectiveNoi-parseFloat(asset.debt_service_annual))/parseFloat(asset.acquisition_price))*100).toFixed(2) : null
+  const dscr = effectiveNoi&&asset.debt_service_annual ? (effectiveNoi/parseFloat(asset.debt_service_annual)).toFixed(2) : null
   const holdYears = asset.target_exit_year&&asset.year_acquired ? parseInt(asset.target_exit_year)-parseInt(asset.year_acquired) : asset.hold_period_years
-  const annualCF = (parseFloat(asset.noi_trailing)||0)-(parseFloat(asset.debt_service_annual)||0)
+  const annualCF = (effectiveNoi||0)-(parseFloat(asset.debt_service_annual)||0)
   const projIRR = calcIRR(parseFloat(asset.acquisition_price)||null, parseFloat(asset.projected_exit_value)||null, holdYears, annualCF)
   const equityMultiple = asset.projected_exit_value&&asset.acquisition_price ? (parseFloat(asset.projected_exit_value)/parseFloat(asset.acquisition_price)).toFixed(2) : null
   const yearsToExit = asset.target_exit_year ? parseInt(asset.target_exit_year)-currentYear : null
   const statusInfo = STATUSES.find(s=>s.value===asset.status)||STATUSES[0]
+
+  const LiveBadge = () => <span style={{fontSize:9,background:'var(--g100)',color:'var(--g600)',padding:'1px 5px',borderRadius:4,fontWeight:600,letterSpacing:'.03em',marginLeft:5}}>⚡ T12</span>
 
   const tabStyle = (t) => ({
     fontSize:13,padding:'7px 18px',borderRadius:20,border:'1px solid',cursor:'pointer',
@@ -310,7 +326,6 @@ export default function AssetDetail() {
                 {[
                   ['Acquisition Price','acquisition_price','number','$'],
                   ['Current Value','current_value','number','$'],
-                  ['Trailing NOI (T12)','noi_trailing','number','$'],
                   ['Annual Debt Service','debt_service_annual','number','$'],
                   ['Entry Cap Rate','cap_rate','number','','%'],
                   ['Rooms','rooms','number'],
@@ -325,6 +340,14 @@ export default function AssetDetail() {
                     <EditField label={label} value={asset[field]} onSave={v=>updateField(field,v)} type={type} prefix={prefix} suffix={suffix}/>
                   </div>
                 ))}
+                {/* NOI — shows T12 from ProfitSword if available, else manual */}
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--gray100)'}}>
+                  <span style={{fontSize:12,color:'var(--gray600)'}}>Trailing NOI (T12){noiIsLive&&<LiveBadge/>}</span>
+                  {noiIsLive
+                    ? <span style={{fontWeight:500,color:'var(--g600)'}}>{fmtM(effectiveNoi)}</span>
+                    : <EditField label="Trailing NOI (T12)" value={asset.noi_trailing} onSave={v=>updateField('noi_trailing',v)} type="number" prefix="$"/>
+                  }
+                </div>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid var(--gray100)'}}>
                   <span style={{fontSize:12,color:'var(--gray600)'}}>Status</span>
                   <EditSelect value={asset.status} options={statusOptions} onSave={v=>updateField('status',v)}/>
@@ -415,9 +438,9 @@ export default function AssetDetail() {
                     {(() => {
                       const rows = [
                         { label:'Purchase Price', uwField:'uw_purchase_price', actual: asset.acquisition_price ? parseFloat(asset.acquisition_price) : null, format:fmtM, type:'number', prefix:'$', noVariance:true },
-                        { label:'NOI', uwField:'uw_noi', actual: asset.noi_trailing ? parseFloat(asset.noi_trailing) : null, format:fmtM, type:'number', prefix:'$' },
-                        { label:'Occupancy', uwField:'uw_occupancy', actual:null, format:v=>v?`${parseFloat(v).toFixed(1)}%`:'—', type:'number', suffix:'%' },
-                        { label:'ADR', uwField:'uw_adr', actual:null, format:v=>v?`$${parseFloat(v).toFixed(0)}`:'—', type:'number', prefix:'$' },
+                        { label:'NOI', uwField:'uw_noi', actual: effectiveNoi, live: noiIsLive, format:fmtM, type:'number', prefix:'$' },
+                        { label:'Occupancy', uwField:'uw_occupancy', actual: t12?.occ ?? null, live: !!t12?.occ, format:v=>v?`${parseFloat(v).toFixed(1)}%`:'—', type:'number', suffix:'%' },
+                        { label:'ADR', uwField:'uw_adr', actual: t12?.adr ?? null, live: !!t12?.adr, format:v=>v?`$${parseFloat(v).toFixed(0)}`:'—', type:'number', prefix:'$' },
                         { label:'Exit Cap Rate', uwField:'uw_exit_cap_rate', actual:null, format:v=>v?`${parseFloat(v).toFixed(2)}%`:'—', type:'number', suffix:'%', noVariance:true },
                       ]
                       return rows.map(row => {
@@ -435,7 +458,7 @@ export default function AssetDetail() {
                           <tr key={row.uwField}>
                             <td style={{fontWeight:500}}>{row.label}</td>
                             <td><EditField label={row.label} value={asset[row.uwField]} onSave={v=>updateField(row.uwField,v)} type={row.type} prefix={row.prefix||''} suffix={row.suffix||''}/></td>
-                            <td style={{color:'var(--gray700)'}}>{act!==null?row.format(act):'—'}</td>
+                            <td style={{color:row.live?'var(--g600)':'var(--gray700)'}}>{act!==null?<>{row.format(act)}{row.live&&<LiveBadge/>}</>:'—'}</td>
                             <td style={{color:varianceColor,fontWeight:variance?500:400}}>{varianceStr}</td>
                           </tr>
                         )
