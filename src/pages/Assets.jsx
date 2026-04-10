@@ -26,12 +26,19 @@ function SortHeader({ label, field, sort, onSort }) {
   )
 }
 
+const BLANK_FORM = { name:'', market:'', type:'hotel', status:'stabilized', rooms:'', brand:'', year_acquired:'', acquisition_price:'' }
+
 export default function Assets() {
-  const { assets, loading, error } = useAssets()
+  const { assets, loading, error, addAsset, deleteAsset } = useAssets()
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(new Set())
   const [sort, setSort] = useState({ field:'name', dir:'asc' })
+  const [addModal, setAddModal] = useState(false)
+  const [addForm, setAddForm] = useState(BLANK_FORM)
+  const [addSaving, setAddSaving] = useState(false)
+  const [addError, setAddError] = useState('')
+  const [deletingId, setDeletingId] = useState(null)
 
   const handleSort = (field) => setSort(s=>s.field===field?{field,dir:s.dir==='asc'?'desc':'asc'}:{field,dir:'asc'})
 
@@ -76,14 +83,41 @@ export default function Assets() {
   const wtdYOC = totalAcq&&totalNOI ? ((totalNOI/totalAcq)*100).toFixed(2) : null
   const wtdLevYOC = totalAcq&&totalNOI&&totalDS ? (((totalNOI-totalDS)/totalAcq)*100).toFixed(2) : null
 
+  const handleAdd = async () => {
+    if (!addForm.name.trim()) { setAddError('Property name is required'); return }
+    setAddSaving(true); setAddError('')
+    const { error } = await addAsset({
+      name: addForm.name.trim(),
+      market: addForm.market || null,
+      type: addForm.type || 'hotel',
+      status: addForm.status || 'stabilized',
+      rooms: addForm.rooms ? parseInt(addForm.rooms) : null,
+      brand: addForm.brand || null,
+      year_acquired: addForm.year_acquired ? parseInt(addForm.year_acquired) : null,
+      acquisition_price: addForm.acquisition_price ? parseFloat(addForm.acquisition_price) : null,
+    })
+    if (error) { setAddError(error.message); setAddSaving(false); return }
+    setAddModal(false); setAddForm(BLANK_FORM); setAddSaving(false)
+  }
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return
+    setDeletingId(id)
+    await deleteAsset(id)
+    setDeletingId(null)
+  }
+
   if (loading) return <div className="loading">Loading assets...</div>
   if (error) return <div className="empty-state"><div className="empty-state-icon">⚠</div><div className="empty-state-title">Can't reach database</div></div>
 
   return (
     <div>
-      <div className="page-header">
-        <h1>Asset Tracker</h1>
-        <p>{assets.length} assets across {[...new Set(assets.map(a=>a.market).filter(Boolean))].length} markets · Click any asset to view or edit</p>
+      <div className="page-header" style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between'}}>
+        <div>
+          <h1>Asset Tracker</h1>
+          <p>{assets.length} assets across {[...new Set(assets.map(a=>a.market).filter(Boolean))].length} markets · Click any asset to view or edit</p>
+        </div>
+        <button className="btn btn-primary" onClick={()=>{setAddForm(BLANK_FORM);setAddError('');setAddModal(true)}}>+ New Asset</button>
       </div>
 
       {/* Portfolio KPI cards */}
@@ -222,10 +256,13 @@ export default function Assets() {
                           {ss.label}
                         </span>
                       </td>
-                      <td>
+                      <td style={{display:'flex',gap:6,alignItems:'center'}}>
                         <Link to={`/assets/${a.id}`} style={{textDecoration:'none'}}>
                           <button className="card-action">View →</button>
                         </Link>
+                        <button className="card-action" style={{color:'var(--red)'}} onClick={()=>handleDelete(a.id,a.name)} disabled={deletingId===a.id}>
+                          {deletingId===a.id?'…':'Del'}
+                        </button>
                       </td>
                     </tr>
                   )
@@ -235,6 +272,64 @@ export default function Assets() {
           </div>
         )}
       </div>
+
+      {addModal&&(
+        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setAddModal(false)}>
+          <div className="modal" style={{maxWidth:480}}>
+            <div className="modal-header">
+              <span className="modal-title">New Asset</span>
+              <button className="modal-close" onClick={()=>setAddModal(false)}>✕</button>
+            </div>
+            {addError&&<div style={{background:'var(--redL)',color:'var(--red)',padding:'8px 12px',borderRadius:7,fontSize:12,marginBottom:12}}>{addError}</div>}
+            <div className="form-group">
+              <label className="form-label">Property Name *</label>
+              <input className="form-input" value={addForm.name} onChange={e=>setAddForm(f=>({...f,name:e.target.value}))} placeholder="The Peabody Memphis" autoFocus/>
+            </div>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">Market</label>
+                <input className="form-input" value={addForm.market} onChange={e=>setAddForm(f=>({...f,market:e.target.value}))} placeholder="Memphis, TN"/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Brand / Flag</label>
+                <input className="form-input" value={addForm.brand} onChange={e=>setAddForm(f=>({...f,brand:e.target.value}))} placeholder="Independent"/>
+              </div>
+            </div>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">Type</label>
+                <select className="form-select" value={addForm.type} onChange={e=>setAddForm(f=>({...f,type:e.target.value}))}>
+                  {TYPES.map(t=><option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Status</label>
+                <select className="form-select" value={addForm.status} onChange={e=>setAddForm(f=>({...f,status:e.target.value}))}>
+                  {STATUSES.map(s=><option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">Rooms</label>
+                <input className="form-input" type="number" value={addForm.rooms} onChange={e=>setAddForm(f=>({...f,rooms:e.target.value}))} placeholder="250"/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Year Acquired</label>
+                <input className="form-input" type="number" value={addForm.year_acquired} onChange={e=>setAddForm(f=>({...f,year_acquired:e.target.value}))} placeholder="2021"/>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Acquisition Price ($)</label>
+              <input className="form-input" type="number" value={addForm.acquisition_price} onChange={e=>setAddForm(f=>({...f,acquisition_price:e.target.value}))} placeholder="45000000"/>
+            </div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:4}}>
+              <button className="btn btn-secondary" onClick={()=>setAddModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleAdd} disabled={addSaving}>{addSaving?'Saving...':'Add Asset'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

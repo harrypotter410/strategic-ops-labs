@@ -504,6 +504,7 @@ html, body { height:100%; font-family:'DM Sans',sans-serif; background:var(--gra
 .soul-l6 { animation-delay: 1.52s; }                            /* → (106,64) */
 .soul-l7 { animation-delay: 1.82s; }                            /* → (116,90) */
 .soul-l8 { animation-delay: 2.10s; animation-duration: 0.5s; } /* → (126,38) ★ final star */
+.soul-lb { animation-delay: 1.20s; animation-duration: 0.3s; } /* K↔W bridge (74,40)→(86,38) */
 
 /* Stars/nodes appear as lines reach them */
 .soul-node { opacity: 0; animation: soul-fade-in 0.35s ease forwards; }

@@ -3,58 +3,43 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/AuthContext'
 
 function KWConstellation({ size = 160 }) {
-  const s = size / 160
-
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 160 160"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      {/* Spine connections */}
-      <line x1="38" y1="34" x2="38" y2="80" stroke="#163d27" strokeWidth="1" opacity="0.7"/>
-      <line x1="38" y1="80" x2="38" y2="126" stroke="#163d27" strokeWidth="1" opacity="0.7"/>
-
+    <svg width={size} height={size} viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Spine — draws top to bottom */}
+      <line className="soul-line soul-l0" pathLength="1" x1="38" y1="34" x2="38" y2="80" stroke="#163d27" strokeWidth="1.2"/>
+      <line className="soul-line soul-l0" pathLength="1" x1="38" y1="80" x2="38" y2="126" stroke="#163d27" strokeWidth="1.2"/>
       {/* Upper arm */}
-      <line x1="38" y1="80" x2="58" y2="58" stroke="#a8d5bc" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="58" y1="58" x2="74" y2="40" stroke="#a8d5bc" strokeWidth="0.8" opacity="0.4"/>
-
+      <line className="soul-line soul-l1" pathLength="1" x1="38" y1="80" x2="58" y2="58" stroke="#a8d5bc" strokeWidth="1"/>
+      <line className="soul-line soul-l2" pathLength="1" x1="58" y1="58" x2="74" y2="40" stroke="#a8d5bc" strokeWidth="1"/>
       {/* Lower arm */}
-      <line x1="38" y1="80" x2="58" y2="102" stroke="#a8d5bc" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="58" y1="102" x2="74" y2="120" stroke="#a8d5bc" strokeWidth="0.8" opacity="0.4"/>
-
-      {/* W letter constellation */}
-      <line x1="86" y1="38" x2="96" y2="90" stroke="#a8d5bc" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="96" y1="90" x2="106" y2="64" stroke="#a8d5bc" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="106" y1="64" x2="116" y2="90" stroke="#a8d5bc" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="116" y1="90" x2="126" y2="38" stroke="#a8d5bc" strokeWidth="0.8" opacity="0.5"/>
-
-      {/* Subtle cross-letter bridge */}
-      <line x1="74" y1="40" x2="86" y2="38" stroke="#2a6e47" strokeWidth="0.5" strokeDasharray="3,5" opacity="0.3"/>
-
+      <line className="soul-line soul-l3" pathLength="1" x1="38" y1="80" x2="58" y2="102" stroke="#a8d5bc" strokeWidth="1"/>
+      <line className="soul-line soul-l4" pathLength="1" x1="58" y1="102" x2="74" y2="120" stroke="#a8d5bc" strokeWidth="1"/>
+      {/* W constellation */}
+      <line className="soul-line soul-l5" pathLength="1" x1="86" y1="38" x2="96" y2="90" stroke="#a8d5bc" strokeWidth="1"/>
+      <line className="soul-line soul-l6" pathLength="1" x1="96" y1="90" x2="106" y2="64" stroke="#a8d5bc" strokeWidth="1"/>
+      <line className="soul-line soul-l7" pathLength="1" x1="106" y1="64" x2="116" y2="90" stroke="#a8d5bc" strokeWidth="1"/>
+      <line className="soul-line soul-l8" pathLength="1" x1="116" y1="90" x2="126" y2="38" stroke="#a8d5bc" strokeWidth="1"/>
+      {/* Bridge between K and W */}
+      <line className="soul-line soul-lb" pathLength="1" x1="74" y1="40" x2="86" y2="38" stroke="#2a6e47" strokeWidth="0.6" strokeDasharray="3,5"/>
       {/* K star nodes */}
-      <circle cx="38" cy="34" r="5" fill="#c9a96e"/>
-      <circle cx="38" cy="34" r="8" fill="#c9a96e" opacity="0.1"/>
-      <circle cx="38" cy="80" r="4.5" fill="#c9a96e"/>
-      <circle cx="38" cy="80" r="8" fill="#c9a96e" opacity="0.08"/>
-      <circle cx="38" cy="126" r="5" fill="#c9a96e"/>
-      <circle cx="38" cy="126" r="8" fill="#c9a96e" opacity="0.1"/>
-      <circle cx="58" cy="58" r="3" fill="#a8d5bc" opacity="0.75"/>
-      <circle cx="74" cy="40" r="4" fill="#c9a96e"/>
-      <circle cx="58" cy="102" r="3" fill="#a8d5bc" opacity="0.75"/>
-      <circle cx="74" cy="120" r="4" fill="#c9a96e"/>
-
+      <circle className="soul-node soul-n0" cx="38" cy="34" r="8" fill="#c9a96e" opacity="0.12"/>
+      <circle className="soul-node soul-n0 soul-pulse" cx="38" cy="34" r="5" fill="#c9a96e"/>
+      <circle className="soul-node soul-n1" cx="38" cy="80" r="8" fill="#c9a96e" opacity="0.1"/>
+      <circle className="soul-node soul-n1 soul-pulse" cx="38" cy="80" r="4.5" fill="#c9a96e"/>
+      <circle className="soul-node soul-n2" cx="38" cy="126" r="8" fill="#c9a96e" opacity="0.12"/>
+      <circle className="soul-node soul-n2 soul-pulse" cx="38" cy="126" r="5" fill="#c9a96e"/>
+      <circle className="soul-node soul-n3" cx="58" cy="58" r="3" fill="#a8d5bc"/>
+      <circle className="soul-node soul-n4 soul-pulse" cx="74" cy="40" r="4" fill="#c9a96e"/>
+      <circle className="soul-node soul-n5" cx="58" cy="102" r="3" fill="#a8d5bc"/>
+      <circle className="soul-node soul-n6 soul-pulse" cx="74" cy="120" r="4" fill="#c9a96e"/>
       {/* W star nodes */}
-      <circle cx="86" cy="38" r="5" fill="#c9a96e"/>
-      <circle cx="86" cy="38" r="8" fill="#c9a96e" opacity="0.1"/>
-      <circle cx="96" cy="90" r="4.5" fill="#c9a96e"/>
-      <circle cx="106" cy="64" r="3.5" fill="#a8d5bc" opacity="0.8"/>
-      <circle cx="116" cy="90" r="4.5" fill="#c9a96e"/>
-      <circle cx="126" cy="38" r="5" fill="#c9a96e"/>
-      <circle cx="126" cy="38" r="8" fill="#c9a96e" opacity="0.1"/>
-
+      <circle className="soul-node soul-n7" cx="86" cy="38" r="8" fill="#c9a96e" opacity="0.12"/>
+      <circle className="soul-node soul-n7 soul-pulse" cx="86" cy="38" r="5" fill="#c9a96e"/>
+      <circle className="soul-node soul-n8 soul-pulse" cx="96" cy="90" r="4.5" fill="#c9a96e"/>
+      <circle className="soul-node soul-n9" cx="106" cy="64" r="3.5" fill="#a8d5bc"/>
+      <circle className="soul-node soul-n10 soul-pulse" cx="116" cy="90" r="4.5" fill="#c9a96e"/>
+      <circle className="soul-node soul-n11" cx="126" cy="38" r="8" fill="#c9a96e" opacity="0.12"/>
+      <circle className="soul-node soul-n11 soul-pulse" cx="126" cy="38" r="5" fill="#c9a96e"/>
       {/* Ambient stars */}
       <circle cx="22" cy="56" r="1.5" fill="#4a9e6e" opacity="0.5"/>
       <circle cx="22" cy="104" r="1.5" fill="#4a9e6e" opacity="0.35"/>
