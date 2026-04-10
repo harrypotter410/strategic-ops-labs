@@ -84,13 +84,6 @@ function KPICard({ label, value, sub, color }) {
   )
 }
 
-// ── INDEX COLOR HELPER ──
-const indexColor = (v) => {
-  if (!v) return 'var(--gray500)'
-  const n = parseFloat(v)
-  return n>=105?'var(--g600)':n>=95?'var(--amber)':'var(--red)'
-}
-
 const fmtDate = (d) => {
   if (!d) return '—'
   const dt = new Date(d + 'T00:00:00')
@@ -101,28 +94,11 @@ export default function AssetDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [asset, setAsset] = useState(null)
-  const [financials, setFinancials] = useState([])
-  const [compData, setCompData] = useState([])
   const [capex, setCapex] = useState([])
   const [roomTypes, setRoomTypes] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('overview')
   const [saving, setSaving] = useState(false)
-
-  // ── P&L form state ──
-  const now = new Date()
-  const [pnlPeriod, setPnlPeriod] = useState({ month: now.getMonth()+1, year: now.getFullYear() })
-  const blankPnl = { revenue:'', gop:'', noi:'', occupancy:'', adr:'', revpar:'', budget_revenue:'', budget_noi:'' }
-  const [pnlForm, setPnlForm] = useState(blankPnl)
-  const [pnlSaving, setPnlSaving] = useState(false)
-  const [pnlStatus, setPnlStatus] = useState(null)
-
-  // ── STR Intel form state ──
-  const [intelPeriod, setIntelPeriod] = useState({ month: now.getMonth()+1, year: now.getFullYear() })
-  const blankIntel = { occ_index:'', adr_index:'', revpar_index:'', comp_set_occ:'', comp_set_adr:'', comp_set_revpar:'' }
-  const [intelForm, setIntelForm] = useState(blankIntel)
-  const [intelSaving, setIntelSaving] = useState(false)
-  const [intelStatus, setIntelStatus] = useState(null)
 
   // ── CapEx form state ──
   const [capexForm, setCapexForm] = useState({ year: currentYear, category:'FF&E', amount:'', brand_required:false, description:'' })
@@ -140,56 +116,16 @@ export default function AssetDetail() {
     setLoading(true)
     Promise.all([
       supabase.from('assets').select('*').eq('id', id).single(),
-      supabase.from('financials').select('*').eq('asset_id', id).order('period_year').order('period_month'),
-      supabase.from('comp_data').select('*').eq('asset_id', id).order('period_year',{ascending:false}).order('period_month',{ascending:false}),
       supabase.from('asset_capex').select('*').eq('asset_id', id).order('year',{ascending:false}),
       supabase.from('room_types').select('*').eq('asset_id', id).order('room_type'),
-    ]).then(([a, f, c, cx, rt]) => {
+    ]).then(([a, cx, rt]) => {
       if (a.error || !a.data) { navigate('/assets'); return }
       setAsset(a.data)
-      setFinancials(f.data||[])
-      setCompData(c.data||[])
       setCapex(cx.data||[])
       setRoomTypes(rt.data||[])
       setLoading(false)
     })
   }, [id])
-
-  // ── Auto-prefill P&L form when period changes ──
-  useEffect(() => {
-    const existing = financials.find(h => h.period_month===pnlPeriod.month && h.period_year===pnlPeriod.year)
-    if (existing) {
-      setPnlForm({
-        revenue: existing.revenue ?? '',
-        gop: existing.gop ?? '',
-        noi: existing.noi ?? '',
-        occupancy: existing.occupancy ?? '',
-        adr: existing.adr ?? '',
-        revpar: existing.revpar ?? '',
-        budget_revenue: existing.budget_revenue ?? '',
-        budget_noi: existing.budget_noi ?? '',
-      })
-    } else {
-      setPnlForm(blankPnl)
-    }
-  }, [pnlPeriod, financials])
-
-  // ── Auto-prefill Intel form when period changes ──
-  useEffect(() => {
-    const existing = compData.find(d => d.period_month===intelPeriod.month && d.period_year===intelPeriod.year)
-    if (existing) {
-      setIntelForm({
-        occ_index: existing.occ_index ?? '',
-        adr_index: existing.adr_index ?? '',
-        revpar_index: existing.revpar_index ?? '',
-        comp_set_occ: existing.comp_set_occ ?? '',
-        comp_set_adr: existing.comp_set_adr ?? '',
-        comp_set_revpar: existing.comp_set_revpar ?? '',
-      })
-    } else {
-      setIntelForm(blankIntel)
-    }
-  }, [intelPeriod, compData])
 
   // ── Field updater for asset record ──
   const updateField = async (field, rawVal) => {
@@ -207,83 +143,6 @@ export default function AssetDetail() {
     const { data, error } = await supabase.from('assets').update({[field]:val}).eq('id',id).select().single()
     if (!error && data) setAsset(data)
     setSaving(false)
-  }
-
-  // ── Save P&L entry ──
-  const savePnl = async () => {
-    setPnlSaving(true)
-    setPnlStatus(null)
-    const { error } = await supabase.from('financials').upsert({
-      asset_id: id,
-      period_month: pnlPeriod.month,
-      period_year: pnlPeriod.year,
-      revenue: pnlForm.revenue!=='' ? parseFloat(pnlForm.revenue) : null,
-      gop: pnlForm.gop!=='' ? parseFloat(pnlForm.gop) : null,
-      noi: pnlForm.noi!=='' ? parseFloat(pnlForm.noi) : null,
-      occupancy: pnlForm.occupancy!=='' ? parseFloat(pnlForm.occupancy) : null,
-      adr: pnlForm.adr!=='' ? parseFloat(pnlForm.adr) : null,
-      revpar: pnlForm.revpar!=='' ? parseFloat(pnlForm.revpar) : null,
-      budget_revenue: pnlForm.budget_revenue!=='' ? parseFloat(pnlForm.budget_revenue) : null,
-      budget_noi: pnlForm.budget_noi!=='' ? parseFloat(pnlForm.budget_noi) : null,
-    }, { onConflict: 'asset_id,period_month,period_year' })
-
-    if (error) {
-      setPnlStatus({ type:'error', msg: error.message })
-      setPnlSaving(false)
-      return
-    }
-
-    // If NOI was entered, update noi_trailing = noi * 12 on the asset
-    if (pnlForm.noi !== '') {
-      const { data: updated } = await supabase
-        .from('assets')
-        .update({ noi_trailing: parseFloat(pnlForm.noi) * 12 })
-        .eq('id', id)
-        .select()
-        .single()
-      if (updated) setAsset(updated)
-    }
-
-    // Refresh financials list
-    const { data: refreshed } = await supabase
-      .from('financials').select('*').eq('asset_id', id)
-      .order('period_year').order('period_month')
-    setFinancials(refreshed || [])
-
-    setPnlStatus({ type:'success', msg:'Saved' })
-    setPnlSaving(false)
-  }
-
-  // ── Save STR Intel entry ──
-  const saveIntel = async () => {
-    setIntelSaving(true)
-    setIntelStatus(null)
-    const { error } = await supabase.from('comp_data').upsert({
-      asset_id: id,
-      period_month: intelPeriod.month,
-      period_year: intelPeriod.year,
-      occ_index: intelForm.occ_index!=='' ? parseFloat(intelForm.occ_index) : null,
-      adr_index: intelForm.adr_index!=='' ? parseFloat(intelForm.adr_index) : null,
-      revpar_index: intelForm.revpar_index!=='' ? parseFloat(intelForm.revpar_index) : null,
-      comp_set_occ: intelForm.comp_set_occ!=='' ? parseFloat(intelForm.comp_set_occ) : null,
-      comp_set_adr: intelForm.comp_set_adr!=='' ? parseFloat(intelForm.comp_set_adr) : null,
-      comp_set_revpar: intelForm.comp_set_revpar!=='' ? parseFloat(intelForm.comp_set_revpar) : null,
-    }, { onConflict: 'asset_id,period_month,period_year' })
-
-    if (error) {
-      setIntelStatus({ type:'error', msg: error.message })
-      setIntelSaving(false)
-      return
-    }
-
-    // Refresh comp data list
-    const { data: refreshed } = await supabase
-      .from('comp_data').select('*').eq('asset_id', id)
-      .order('period_year',{ascending:false}).order('period_month',{ascending:false})
-    setCompData(refreshed || [])
-
-    setIntelStatus({ type:'success', msg:'Saved' })
-    setIntelSaving(false)
   }
 
   // ── Save CapEx entry ──
@@ -357,16 +216,6 @@ export default function AssetDetail() {
   const yearsToExit = asset.target_exit_year ? parseInt(asset.target_exit_year)-currentYear : null
   const statusInfo = STATUSES.find(s=>s.value===asset.status)||STATUSES[0]
 
-  // ── Chart data (last 12 months) ──
-  const chartData = financials.slice(-12).map(f=>({
-    label:`${MONTHS[f.period_month-1].slice(0,3)} ${String(f.period_year).slice(2)}`,
-    revenue: f.revenue ? Math.round(parseFloat(f.revenue)/1000) : null,
-    noi: f.noi ? Math.round(parseFloat(f.noi)/1000) : null,
-  }))
-
-  const latestComp = compData[0]
-  const latestFinancial = financials.length > 0 ? financials[financials.length - 1] : null
-
   const tabStyle = (t) => ({
     fontSize:13,padding:'7px 18px',borderRadius:20,border:'1px solid',cursor:'pointer',
     fontWeight:tab===t?500:400,
@@ -429,7 +278,7 @@ export default function AssetDetail() {
 
       {/* ── Tabs ── */}
       <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
-        {[['overview','Overview'],['exit','Exit & Returns'],['pnl','Monthly P&L'],['intel','STR Intel'],['hotel','Hotel Profile'],['capex','CapEx & PIP']].map(([t,l])=>(
+        {[['overview','Overview'],['exit','Exit & Returns'],['hotel','Hotel Profile'],['capex','CapEx & PIP']].map(([t,l])=>(
           <button key={t} style={tabStyle(t)} onClick={()=>setTab(t)}>{l}</button>
         ))}
       </div>
@@ -664,245 +513,6 @@ export default function AssetDetail() {
               </table>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ══ MONTHLY P&L TAB ══ */}
-      {tab==='pnl'&&(
-        <div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
-            {/* Entry form */}
-            <div className="card" style={{marginBottom:0}}>
-              <div className="card-header"><span className="card-title">Enter Monthly P&L</span></div>
-
-              {/* Period selector */}
-              <div style={{display:'flex',gap:8,marginBottom:14}}>
-                <div className="form-group" style={{flex:1,margin:0}}>
-                  <label className="form-label">Month</label>
-                  <select className="form-select" value={pnlPeriod.month} onChange={e=>setPnlPeriod(p=>({...p,month:parseInt(e.target.value)}))}>
-                    {MONTHS.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
-                  </select>
-                </div>
-                <div className="form-group" style={{flex:1,margin:0}}>
-                  <label className="form-label">Year</label>
-                  <input className="form-input" type="number" value={pnlPeriod.year} onChange={e=>setPnlPeriod(p=>({...p,year:parseInt(e.target.value)||p.year}))}/>
-                </div>
-              </div>
-
-              {pnlStatus&&(
-                <div style={{background:pnlStatus.type==='success'?'var(--g100)':'var(--redL)',color:pnlStatus.type==='success'?'var(--g700)':'var(--red)',padding:'7px 12px',borderRadius:7,fontSize:12,marginBottom:12}}>
-                  {pnlStatus.type==='success'?'Saved successfully':'Error: '+pnlStatus.msg}
-                </div>
-              )}
-
-              <div className="form-grid-2" style={{marginBottom:8}}>
-                <div className="form-group"><label className="form-label">Revenue ($)</label><input className="form-input" type="number" value={pnlForm.revenue} onChange={e=>setPnlForm(f=>({...f,revenue:e.target.value}))}/></div>
-                <div className="form-group"><label className="form-label">GOP ($)</label><input className="form-input" type="number" value={pnlForm.gop} onChange={e=>setPnlForm(f=>({...f,gop:e.target.value}))}/></div>
-              </div>
-              <div className="form-group" style={{marginBottom:8}}>
-                <label className="form-label">NOI ($) <span style={{fontSize:9,color:'var(--gray400)'}}>-- also updates Trailing NOI on asset (x12)</span></label>
-                <input className="form-input" type="number" value={pnlForm.noi} onChange={e=>setPnlForm(f=>({...f,noi:e.target.value}))}/>
-              </div>
-              <div className="form-grid-2" style={{marginBottom:8}}>
-                <div className="form-group"><label className="form-label">Occupancy (%)</label><input className="form-input" type="number" step="0.1" value={pnlForm.occupancy} onChange={e=>setPnlForm(f=>({...f,occupancy:e.target.value}))}/></div>
-                <div className="form-group"><label className="form-label">ADR ($)</label><input className="form-input" type="number" value={pnlForm.adr} onChange={e=>setPnlForm(f=>({...f,adr:e.target.value}))}/></div>
-              </div>
-              <div className="form-group" style={{marginBottom:8}}>
-                <label className="form-label">RevPAR ($)</label>
-                <input className="form-input" type="number" value={pnlForm.revpar} onChange={e=>setPnlForm(f=>({...f,revpar:e.target.value}))}/>
-              </div>
-              <div className="form-grid-2" style={{marginBottom:14}}>
-                <div className="form-group"><label className="form-label">Budget Revenue ($)</label><input className="form-input" type="number" value={pnlForm.budget_revenue} onChange={e=>setPnlForm(f=>({...f,budget_revenue:e.target.value}))}/></div>
-                <div className="form-group"><label className="form-label">Budget NOI ($)</label><input className="form-input" type="number" value={pnlForm.budget_noi} onChange={e=>setPnlForm(f=>({...f,budget_noi:e.target.value}))}/></div>
-              </div>
-              <button className="btn btn-primary" onClick={savePnl} disabled={pnlSaving} style={{width:'100%'}}>
-                {pnlSaving?'Saving...':'Save P&L'}
-              </button>
-            </div>
-
-            {/* Bar chart */}
-            <div className="card" style={{marginBottom:0}}>
-              <div className="card-header"><span className="card-title">Revenue vs NOI ($000s) -- last 12 months</span></div>
-              {chartData.some(d=>d.noi||d.revenue)?(
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={chartData}>
-                    <XAxis dataKey="label" tick={{fontSize:10}} axisLine={false} tickLine={false}/>
-                    <YAxis tick={{fontSize:10}} axisLine={false} tickLine={false}/>
-                    <Tooltip formatter={(v,n)=>[`$${v}K`,n]} contentStyle={{fontSize:11,borderRadius:6}}/>
-                    <Bar dataKey="revenue" fill="var(--g200)" name="Revenue" radius={[2,2,0,0]}/>
-                    <Bar dataKey="noi" fill="var(--g600)" name="NOI" radius={[2,2,0,0]}/>
-                  </BarChart>
-                </ResponsiveContainer>
-              ):(
-                <div style={{fontSize:12,color:'var(--gray500)',textAlign:'center',padding:'40px 20px'}}>
-                  No P&L data yet -- save a period on the left.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* History table */}
-          {financials.length>0&&(
-            <div className="card">
-              <div className="card-header"><span className="card-title">P&L history</span><span style={{fontSize:10,color:'var(--gray500)'}}>Click a row to load that period into the form</span></div>
-              <div style={{overflowX:'auto'}}>
-                <table className="data-table">
-                  <thead><tr><th>Period</th><th>Revenue</th><th>GOP</th><th>NOI</th><th>NOI Margin</th><th>Occ %</th><th>ADR</th><th>RevPAR</th></tr></thead>
-                  <tbody>
-                    {[...financials].reverse().map(f=>{
-                      const margin = f.revenue&&f.noi ? ((parseFloat(f.noi)/parseFloat(f.revenue))*100).toFixed(1) : null
-                      const isActive = pnlPeriod.month===f.period_month && pnlPeriod.year===f.period_year
-                      return (
-                        <tr key={f.id} style={{cursor:'pointer',background:isActive?'var(--g50)':undefined}}
-                          onClick={()=>setPnlPeriod({month:f.period_month,year:f.period_year})}>
-                          <td><strong>{MONTHS[f.period_month-1]} {f.period_year}</strong></td>
-                          <td>{fmtM(f.revenue)}</td>
-                          <td>{fmtM(f.gop)}</td>
-                          <td style={{fontWeight:500}}>{fmtM(f.noi)}</td>
-                          <td>{margin?`${margin}%`:'—'}</td>
-                          <td>{f.occupancy?`${parseFloat(f.occupancy).toFixed(1)}%`:'—'}</td>
-                          <td>{f.adr?`$${parseFloat(f.adr).toFixed(0)}`:'—'}</td>
-                          <td>{f.revpar?`$${parseFloat(f.revpar).toFixed(0)}`:'—'}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ══ STR INTEL TAB ══ */}
-      {tab==='intel'&&(
-        <div>
-          {/* Latest KPI cards */}
-          {latestComp&&(
-            <div className="kpi-grid" style={{marginBottom:16}}>
-              {[
-                ['MPI (Occ. Index)',latestComp.occ_index,'Occupancy vs comp set'],
-                ['ARI (ADR Index)',latestComp.adr_index,'ADR vs comp set'],
-                ['RGI (RevPAR Index)',latestComp.revpar_index,'RevPAR vs comp set -- 100 = fair share'],
-              ].map(([label,val,sub])=>{
-                const v = val ? parseFloat(val) : null
-                return <KPICard key={label} label={label} value={v?v.toFixed(1):null} sub={sub} color={indexColor(v)}/>
-              })}
-              <KPICard label="Latest Period" value={`${MONTHS[latestComp.period_month-1]} ${latestComp.period_year}`}/>
-            </div>
-          )}
-
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
-            {/* Entry form */}
-            <div className="card" style={{marginBottom:0}}>
-              <div className="card-header"><span className="card-title">Enter STR Data</span></div>
-
-              <div style={{display:'flex',gap:8,marginBottom:14}}>
-                <div className="form-group" style={{flex:1,margin:0}}>
-                  <label className="form-label">Month</label>
-                  <select className="form-select" value={intelPeriod.month} onChange={e=>setIntelPeriod(p=>({...p,month:parseInt(e.target.value)}))}>
-                    {MONTHS.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
-                  </select>
-                </div>
-                <div className="form-group" style={{flex:1,margin:0}}>
-                  <label className="form-label">Year</label>
-                  <input className="form-input" type="number" value={intelPeriod.year} onChange={e=>setIntelPeriod(p=>({...p,year:parseInt(e.target.value)||p.year}))}/>
-                </div>
-              </div>
-
-              {intelStatus&&(
-                <div style={{background:intelStatus.type==='success'?'var(--g100)':'var(--redL)',color:intelStatus.type==='success'?'var(--g700)':'var(--red)',padding:'7px 12px',borderRadius:7,fontSize:12,marginBottom:12}}>
-                  {intelStatus.type==='success'?'Saved successfully':'Error: '+intelStatus.msg}
-                </div>
-              )}
-
-              <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--g600)',marginBottom:8}}>STR Indices (subject property)</div>
-              <div className="form-grid-2" style={{marginBottom:8}}>
-                <div className="form-group"><label className="form-label">MPI -- Occ. Index</label><input className="form-input" type="number" step="0.1" value={intelForm.occ_index} onChange={e=>setIntelForm(f=>({...f,occ_index:e.target.value}))}/></div>
-                <div className="form-group"><label className="form-label">ARI -- ADR Index</label><input className="form-input" type="number" step="0.1" value={intelForm.adr_index} onChange={e=>setIntelForm(f=>({...f,adr_index:e.target.value}))}/></div>
-              </div>
-              <div className="form-group" style={{marginBottom:12}}>
-                <label className="form-label">RGI -- RevPAR Index</label>
-                <input className="form-input" type="number" step="0.1" value={intelForm.revpar_index} onChange={e=>setIntelForm(f=>({...f,revpar_index:e.target.value}))}/>
-              </div>
-
-              <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.06em',color:'var(--g600)',marginBottom:8}}>Comp set actuals</div>
-              <div className="form-grid-2" style={{marginBottom:8}}>
-                <div className="form-group"><label className="form-label">Comp Set Occ (%)</label><input className="form-input" type="number" step="0.1" value={intelForm.comp_set_occ} onChange={e=>setIntelForm(f=>({...f,comp_set_occ:e.target.value}))}/></div>
-                <div className="form-group"><label className="form-label">Comp Set ADR ($)</label><input className="form-input" type="number" value={intelForm.comp_set_adr} onChange={e=>setIntelForm(f=>({...f,comp_set_adr:e.target.value}))}/></div>
-              </div>
-              <div className="form-group" style={{marginBottom:14}}>
-                <label className="form-label">Comp Set RevPAR ($)</label>
-                <input className="form-input" type="number" value={intelForm.comp_set_revpar} onChange={e=>setIntelForm(f=>({...f,comp_set_revpar:e.target.value}))}/>
-              </div>
-              <button className="btn btn-primary" onClick={saveIntel} disabled={intelSaving} style={{width:'100%'}}>
-                {intelSaving?'Saving...':'Save STR Data'}
-              </button>
-            </div>
-
-            {/* Info card */}
-            <div className="card" style={{marginBottom:0}}>
-              <div className="card-header"><span className="card-title">Index guide</span></div>
-              <div style={{fontSize:12,color:'var(--gray700)',lineHeight:1.8}}>
-                <div style={{marginBottom:12}}>
-                  <strong>MPI</strong> (Market Penetration Index) -- your occupancy / comp set occupancy x 100.<br/>
-                  <strong>ARI</strong> (ADR Index) -- your ADR / comp set ADR x 100.<br/>
-                  <strong>RGI</strong> (RevPAR Index) -- your RevPAR / comp set RevPAR x 100.
-                </div>
-                <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{width:10,height:10,borderRadius:'50%',background:'var(--g600)',display:'inline-block'}}></span>
-                    <span><strong style={{color:'var(--g600)'}}>105+</strong> -- outperforming comp set</span>
-                  </div>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{width:10,height:10,borderRadius:'50%',background:'var(--amber)',display:'inline-block'}}></span>
-                    <span><strong style={{color:'var(--amber)'}}>95-104</strong> -- at or near fair share</span>
-                  </div>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{width:10,height:10,borderRadius:'50%',background:'var(--red)',display:'inline-block'}}></span>
-                    <span><strong style={{color:'var(--red)'}}>Below 95</strong> -- underperforming comp set</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* History table */}
-          {compData.length>0&&(
-            <div className="card">
-              <div className="card-header"><span className="card-title">STR history</span><span style={{fontSize:10,color:'var(--gray500)'}}>Click a row to load that period</span></div>
-              <div style={{overflowX:'auto'}}>
-                <table className="data-table">
-                  <thead><tr><th>Period</th><th>MPI</th><th>ARI</th><th>RGI</th><th>Comp Occ</th><th>Comp ADR</th><th>Comp RevPAR</th></tr></thead>
-                  <tbody>
-                    {compData.map(d=>{
-                      const isActive = intelPeriod.month===d.period_month && intelPeriod.year===d.period_year
-                      return (
-                        <tr key={d.id} style={{cursor:'pointer',background:isActive?'var(--g50)':undefined}}
-                          onClick={()=>setIntelPeriod({month:d.period_month,year:d.period_year})}>
-                          <td><strong>{MONTHS[d.period_month-1]} {d.period_year}</strong></td>
-                          <td style={{color:indexColor(d.occ_index),fontWeight:500}}>{d.occ_index?parseFloat(d.occ_index).toFixed(1):'—'}</td>
-                          <td style={{color:indexColor(d.adr_index),fontWeight:500}}>{d.adr_index?parseFloat(d.adr_index).toFixed(1):'—'}</td>
-                          <td style={{color:indexColor(d.revpar_index),fontWeight:700}}>{d.revpar_index?parseFloat(d.revpar_index).toFixed(1):'—'}</td>
-                          <td>{d.comp_set_occ?`${parseFloat(d.comp_set_occ).toFixed(1)}%`:'—'}</td>
-                          <td>{d.comp_set_adr?`$${parseFloat(d.comp_set_adr).toFixed(0)}`:'—'}</td>
-                          <td>{d.comp_set_revpar?`$${parseFloat(d.comp_set_revpar).toFixed(0)}`:'—'}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {compData.length===0&&(
-            <div className="empty-state">
-              <div className="empty-state-icon">📉</div>
-              <div className="empty-state-title">No STR data yet</div>
-              <div className="empty-state-desc">Enter monthly STR index data using the form above.</div>
-            </div>
-          )}
         </div>
       )}
 

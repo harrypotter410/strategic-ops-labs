@@ -8,50 +8,21 @@ import { useAssets } from '../hooks/useData'
 
 const IMPORT_TYPES = [
   { value: '', label: 'Select import type…' },
-  { value: 'pl', label: 'Monthly P&L (Financial Report)' },
-  { value: 'str', label: 'STR Report (Competitive Benchmarking)' },
   { value: 'appraisal', label: 'Appraisal / Valuation' },
   { value: 'loan', label: 'Loan / Debt Document' },
   { value: 'franchise', label: 'Franchise / Management Agreement' },
 ]
 
 const SYSTEM_PROMPTS = {
-  pl: 'You are extracting hotel financial data from an operator P&L report. Return ONLY a JSON array where each element has: property_name, period_month (1-12), period_year (4 digits), revenue (number in dollars), gop (gross operating profit, number), noi (net operating income, number), occupancy (percentage as a number e.g. 78 for 78%, NOT 0.78), adr (average daily rate, number), revpar (number). If a field is not found return null. Return only valid JSON, no other text.',
-  str: 'You are extracting hotel competitive benchmarking data from an STR report. Return ONLY a JSON array where each element has: property_name, period_month (1-12), period_year (4 digits), my_occupancy (percentage as a number e.g. 78 for 78%, NOT 0.78), my_adr (number), my_revpar (number), comp_set_occ (percentage as a number e.g. 72 for 72%, NOT 0.72), comp_set_adr (number), comp_set_revpar (number), occ_index (MPI, number e.g. 107.3), adr_index (ARI, number), revpar_index (RGI, number). Return only valid JSON, no other text.',
   appraisal: 'You are extracting data from a real estate appraisal report. Return ONLY a JSON object with: property_name, valuation_date (YYYY-MM-DD), appraised_value (number in dollars), cap_rate_applied (percentage as a number e.g. 6.5 for 6.5%, NOT 0.065), noi_used (number), equity_value (number or null), notes (brief string summarizing key findings, max 200 chars). Return only valid JSON, no other text.',
   loan: 'You are extracting data from a commercial real estate loan document or term sheet. Return ONLY a JSON object with: property_name, lender, loan_type (one of: senior, mezzanine, bridge, permanent, construction, preferred_equity), original_balance (number), current_balance (number or null), interest_rate (percentage as a number e.g. 5.75 for 5.75%, NOT 0.0575), rate_type (fixed or floating), maturity_date (YYYY-MM-DD), annual_debt_service (number or null), ltv (percentage as a number e.g. 65 for 65%, NOT 0.65, or null), covenant_dscr_min (number or null), covenant_ltv_max (percentage as a number e.g. 75 for 75%, or null), covenant_occupancy_min (percentage as a number e.g. 60 for 60%, or null). Return only valid JSON, no other text.',
   franchise: 'You are extracting data from a hotel franchise agreement or management contract. Return ONLY a JSON object with: property_name, franchise_expiry (YYYY-MM-DD or null), franchise_fee_pct (percentage as a number e.g. 5 for 5%, NOT 0.05, or null), pip_cost_estimate (number in dollars or null), pip_deadline (YYYY-MM-DD or null), management_company (string or null), management_fee_pct (percentage as a number e.g. 3 for 3%, NOT 0.03, or null), mgmt_contract_expiry (YYYY-MM-DD or null). Return only valid JSON, no other text.',
 }
 
 // Types that return an array of rows (vs. a single object)
-const ARRAY_TYPES = new Set(['pl', 'str'])
+const ARRAY_TYPES = new Set([])
 
 const FIELD_DEFS = {
-  pl: [
-    { key: 'property_name', label: 'Property' },
-    { key: 'period_month',  label: 'Month' },
-    { key: 'period_year',   label: 'Year' },
-    { key: 'revenue',       label: 'Revenue ($)' },
-    { key: 'gop',           label: 'GOP ($)' },
-    { key: 'noi',           label: 'NOI ($)' },
-    { key: 'occupancy',     label: 'Occupancy (%, e.g. 78)' },
-    { key: 'adr',           label: 'ADR ($)' },
-    { key: 'revpar',        label: 'RevPAR ($)' },
-  ],
-  str: [
-    { key: 'property_name',   label: 'Property' },
-    { key: 'period_month',    label: 'Month' },
-    { key: 'period_year',     label: 'Year' },
-    { key: 'my_occupancy',    label: 'My Occ (%, e.g. 78)' },
-    { key: 'my_adr',          label: 'My ADR' },
-    { key: 'my_revpar',       label: 'My RevPAR' },
-    { key: 'comp_set_occ',    label: 'Comp Occ (%, e.g. 72)' },
-    { key: 'comp_set_adr',    label: 'Comp ADR' },
-    { key: 'comp_set_revpar', label: 'Comp RevPAR' },
-    { key: 'occ_index',       label: 'MPI' },
-    { key: 'adr_index',       label: 'ARI' },
-    { key: 'revpar_index',    label: 'RGI' },
-  ],
   appraisal: [
     { key: 'property_name',    label: 'Property Name' },
     { key: 'valuation_date',   label: 'Valuation Date (YYYY-MM-DD)' },
@@ -89,8 +60,6 @@ const FIELD_DEFS = {
 }
 
 const SUCCESS_LINKS = {
-  pl:        { label: 'View Financial Performance', path: '/financial' },
-  str:       { label: 'View STR Benchmark', path: '/str-benchmark' },
   appraisal: { label: 'View Valuations', path: '/valuations' },
   loan:      { label: 'View Debt Tracker', path: '/debt' },
   franchise: { label: 'View Assets', path: '/assets' },
@@ -211,43 +180,6 @@ function normPct(v) {
 }
 
 async function saveData(importType, assetId, editedData) {
-  if (importType === 'pl') {
-    const rows = editedData.map(row => ({
-      asset_id:     assetId,
-      period_month: parseInt(row.period_month) || null,
-      period_year:  parseInt(row.period_year)  || null,
-      revenue:      parseNum(row.revenue),
-      gop:          parseNum(row.gop),
-      noi:          parseNum(row.noi),
-      occupancy:    normPct(row.occupancy),
-      adr:          parseNum(row.adr),
-      revpar:       parseNum(row.revpar),
-    }))
-    const { error } = await supabase.from('financials').insert(rows)
-    if (error) throw error
-    return { desc: `${rows.length} month(s) of financial data`, table: 'financials' }
-  }
-
-  if (importType === 'str') {
-    const rows = editedData.map(row => ({
-      asset_id:        assetId,
-      period_month:    parseInt(row.period_month) || null,
-      period_year:     parseInt(row.period_year)  || null,
-      my_occupancy:    normPct(row.my_occupancy),
-      my_adr:          parseNum(row.my_adr),
-      my_revpar:       parseNum(row.my_revpar),
-      comp_set_occ:    normPct(row.comp_set_occ),
-      comp_set_adr:    parseNum(row.comp_set_adr),
-      comp_set_revpar: parseNum(row.comp_set_revpar),
-      occ_index:       parseNum(row.occ_index),
-      adr_index:       parseNum(row.adr_index),
-      revpar_index:    parseNum(row.revpar_index),
-    }))
-    const { error } = await supabase.from('comp_data').insert(rows)
-    if (error) throw error
-    return { desc: `${rows.length} STR period(s)`, table: 'comp_data' }
-  }
-
   if (importType === 'appraisal') {
     const d = editedData
     const date = d.valuation_date ? new Date(d.valuation_date) : new Date()

@@ -21,14 +21,6 @@ const TEMPLATES = [
     sample: [['The Peabody Memphis','hotel','Memphis, TN',464,'active','Independent',2018,95000000,142000000,6.8,'Flagship asset']],
   },
   {
-    id: 'financials',
-    name: 'Monthly Financials',
-    desc: 'P&L data — revenue, NOI, occupancy, ADR, RevPAR',
-    icon: '📊',
-    headers: ['asset_name','period_month','period_year','revenue','gop','noi','ebitda','occupancy','adr','revpar','budget_revenue','budget_noi'],
-    sample: [['The Peabody Memphis',1,2026,4200000,1900000,1450000,34.5,78,182,142,4000000,1400000]],
-  },
-  {
     id: 'deals',
     name: 'Deal Pipeline',
     desc: 'Import acquisition deals and return projections',
@@ -128,30 +120,6 @@ export default function DataHub() {
           }
           if (existing) { const { error } = await updateAsset(existing.id, payload); error ? errors++ : imported++ }
           else { const { error } = await addAsset(payload); error ? errors++ : imported++ }
-        }
-      } else if (activeTemplate === 'financials') {
-        const toInsert = []
-        for (const row of rows) {
-          if (!row.asset_name) continue
-          const asset = assets.find(a => a.name.toLowerCase().includes(String(row.asset_name).toLowerCase()))
-          if (!asset) { errors++; continue }
-          toInsert.push({
-            asset_id: asset.id,
-            period_month: parseInt(row.period_month), period_year: parseInt(row.period_year),
-            revenue: row.revenue ? parseFloat(row.revenue) : null,
-            gop: row.gop ? parseFloat(row.gop) : null,
-            noi: row.noi ? parseFloat(row.noi) : null,
-            ebitda: row.ebitda ? parseFloat(row.ebitda) : null,
-            occupancy: row.occupancy ? parseFloat(row.occupancy) : null,
-            adr: row.adr ? parseFloat(row.adr) : null,
-            revpar: row.revpar ? parseFloat(row.revpar) : null,
-            budget_revenue: row.budget_revenue ? parseFloat(row.budget_revenue) : null,
-            budget_noi: row.budget_noi ? parseFloat(row.budget_noi) : null,
-          })
-        }
-        if (toInsert.length > 0) {
-          const { error } = await supabase.from('financials').upsert(toInsert, { onConflict: 'asset_id,period_month,period_year' })
-          error ? errors += toInsert.length : imported += toInsert.length
         }
       } else if (activeTemplate === 'deals') {
         for (const row of rows) {

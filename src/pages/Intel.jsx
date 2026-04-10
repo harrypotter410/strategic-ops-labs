@@ -52,30 +52,19 @@ export default function Intel() {
   const [compSets, setCompSets] = useState([])
   const [loading, setLoading] = useState(false)
   const [addCompModal, setAddCompModal] = useState(false)
-  const [addDataModal, setAddDataModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState(false)
 
   // FIX: comp form has explicit asset_id binding
   const blankCompForm = { asset_id:'', comp_name:'', comp_brand:'', comp_market:'', comp_rooms:'' }
-  const blankDataForm = {
-    period_month:String(new Date().getMonth()+1),
-    period_year:String(new Date().getFullYear()),
-    my_occupancy:'', my_adr:'', my_revpar:'',
-    comp_set_occ:'', comp_set_adr:'', comp_set_revpar:'',
-    occ_index:'', adr_index:'', revpar_index:''
-  }
   const [compForm, setCompForm] = useState(blankCompForm)
-  const [dataForm, setDataForm] = useState(blankDataForm)
   const setC = (k,v) => setCompForm(f=>({...f,[k]:v}))
-  const setD = (k,v) => setDataForm(f=>({...f,[k]:v}))
 
-  // Auto-set asset_id in both forms when selectedId changes
+  // Auto-set asset_id in comp form when selectedId changes
   useEffect(() => {
     if (selectedId) {
       setCompForm(f=>({...f,asset_id:selectedId}))
-      setDataForm(f=>({...f}))
     }
   }, [selectedId])
 
@@ -121,39 +110,6 @@ export default function Intel() {
     setSaving(false)
   }
 
-  // FIX: Save STR data with explicit asset_id
-  const handleSaveData = async () => {
-    setSaveError('')
-    if (!selectedId) { setSaveError('No asset selected'); return }
-    if (!dataForm.period_month||!dataForm.period_year) { setSaveError('Period is required'); return }
-    setSaving(true)
-    const payload = {
-      asset_id: selectedId, // FIX: use selectedId directly, not from form
-      period_month: parseInt(dataForm.period_month),
-      period_year: parseInt(dataForm.period_year),
-      my_occupancy: dataForm.my_occupancy?parseFloat(dataForm.my_occupancy):null,
-      my_adr: dataForm.my_adr?parseFloat(dataForm.my_adr):null,
-      my_revpar: dataForm.my_revpar?parseFloat(dataForm.my_revpar):null,
-      comp_set_occ: dataForm.comp_set_occ?parseFloat(dataForm.comp_set_occ):null,
-      comp_set_adr: dataForm.comp_set_adr?parseFloat(dataForm.comp_set_adr):null,
-      comp_set_revpar: dataForm.comp_set_revpar?parseFloat(dataForm.comp_set_revpar):null,
-      occ_index: dataForm.occ_index?parseFloat(dataForm.occ_index):null,
-      adr_index: dataForm.adr_index?parseFloat(dataForm.adr_index):null,
-      revpar_index: dataForm.revpar_index?parseFloat(dataForm.revpar_index):null,
-      data_source: 'manual',
-    }
-    const { data, error } = await supabase.from('comp_data').upsert(payload, { onConflict:'asset_id,period_month,period_year' }).select().single()
-    if (error) { setSaveError(error.message); setSaving(false); return }
-    setCompData(prev=>{
-      const exists=prev.findIndex(d=>d.period_month===payload.period_month&&d.period_year===payload.period_year)
-      return exists>=0?prev.map((d,i)=>i===exists?data:d):[data,...prev].sort((a,b)=>b.period_year-a.period_year||b.period_month-a.period_month)
-    })
-    setDataForm(blankDataForm)
-    setSaveSuccess(true)
-    setTimeout(()=>{setSaveSuccess(false);setAddDataModal(false)},1200)
-    setSaving(false)
-  }
-
   // Chart data
   const chartData = [...compData].reverse().slice(-12).map(d=>({
     label:`${MONTHS[d.period_month-1].slice(0,3)} ${String(d.period_year).slice(2)}`,
@@ -183,7 +139,6 @@ export default function Intel() {
           )}
           <div style={{display:'flex',gap:8,marginLeft:'auto'}}>
             <button className="btn btn-secondary btn-sm" onClick={()=>{setSaveError('');setSaveSuccess(false);setAddCompModal(true)}} disabled={!selectedId}>+ Add Competitor</button>
-            <button className="btn btn-primary btn-sm" onClick={()=>{setSaveError('');setSaveSuccess(false);setAddDataModal(true)}} disabled={!selectedId}>+ Add STR Data</button>
           </div>
         </div>
       </div>
@@ -269,7 +224,7 @@ export default function Intel() {
             <div className="empty-state">
               <div className="empty-state-icon">📊</div>
               <div className="empty-state-title">No STR data for {selectedAsset?.name}</div>
-              <div className="empty-state-desc">Click "+ Add STR Data" above to enter monthly comp data. You can enter MPI, ARI, and RGI directly from your STR report.</div>
+              <div className="empty-state-desc">STR data will appear here once synced via the Integrations tab.</div>
             </div>
           )}
 
@@ -290,53 +245,6 @@ export default function Intel() {
             </div>
           )}
         </>
-      )}
-
-      {/* Add STR Data Modal — FIX: asset_id set from selectedId directly */}
-      {addDataModal&&(
-        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setAddDataModal(false)}>
-          <div className="modal" style={{width:520}}>
-            <div className="modal-header">
-              <span className="modal-title">+ STR Data — {selectedAsset?.name}</span>
-              <button className="modal-close" onClick={()=>setAddDataModal(false)}>✕</button>
-            </div>
-            {saveError&&<div style={{background:'var(--redL)',color:'var(--red)',padding:'8px 12px',borderRadius:7,fontSize:12,marginBottom:12}}>{saveError}</div>}
-            {saveSuccess&&<div style={{background:'var(--g100)',color:'var(--g700)',padding:'8px 12px',borderRadius:7,fontSize:12,marginBottom:12}}>✓ Saved successfully</div>}
-            <div style={{background:'var(--g50)',border:'1px solid var(--g100)',borderRadius:7,padding:'8px 12px',fontSize:11,color:'var(--g700)',marginBottom:12}}>
-              Entering data for: <strong>{selectedAsset?.name}</strong>. Enter values directly from your STR report. All fields are optional — just enter what you have.
-            </div>
-            <div className="form-grid-2">
-              <div className="form-group"><label className="form-label">Month</label>
-                <select className="form-select" value={dataForm.period_month} onChange={e=>setD('period_month',e.target.value)}>
-                  {MONTHS.map((m,i)=><option key={i+1} value={String(i+1)}>{m}</option>)}
-                </select>
-              </div>
-              <div className="form-group"><label className="form-label">Year</label><input className="form-input" type="number" value={dataForm.period_year} onChange={e=>setD('period_year',e.target.value)}/></div>
-            </div>
-            <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--g600)',margin:'4px 0 10px'}}>My Property</div>
-            <div className="form-grid-2">
-              <div className="form-group"><label className="form-label">Occupancy (%)</label><input className="form-input" type="number" step="0.1" value={dataForm.my_occupancy} onChange={e=>setD('my_occupancy',e.target.value)} placeholder="78.4"/></div>
-              <div className="form-group"><label className="form-label">ADR ($)</label><input className="form-input" type="number" value={dataForm.my_adr} onChange={e=>setD('my_adr',e.target.value)} placeholder="192.00"/></div>
-            </div>
-            <div className="form-group"><label className="form-label">RevPAR ($) <span style={{fontSize:9,color:'var(--gray400)'}}>or auto-calc as Occ% × ADR</span></label><input className="form-input" type="number" value={dataForm.my_revpar} onChange={e=>setD('my_revpar',e.target.value)} placeholder="150.53"/></div>
-            <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--g600)',margin:'8px 0 10px'}}>Comp Set</div>
-            <div className="form-grid-2">
-              <div className="form-group"><label className="form-label">Comp Set Occ. (%)</label><input className="form-input" type="number" step="0.1" value={dataForm.comp_set_occ} onChange={e=>setD('comp_set_occ',e.target.value)} placeholder="73.1"/></div>
-              <div className="form-group"><label className="form-label">Comp Set ADR ($)</label><input className="form-input" type="number" value={dataForm.comp_set_adr} onChange={e=>setD('comp_set_adr',e.target.value)} placeholder="168.50"/></div>
-            </div>
-            <div className="form-group"><label className="form-label">Comp Set RevPAR ($)</label><input className="form-input" type="number" value={dataForm.comp_set_revpar} onChange={e=>setD('comp_set_revpar',e.target.value)} placeholder="123.14"/></div>
-            <div style={{fontSize:10,fontWeight:500,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--g600)',margin:'8px 0 10px'}}>STR Indices (from STR report)</div>
-            <div className="form-grid-2">
-              <div className="form-group"><label className="form-label">MPI (Occ. Index)</label><input className="form-input" type="number" step="0.1" value={dataForm.occ_index} onChange={e=>setD('occ_index',e.target.value)} placeholder="107.3"/></div>
-              <div className="form-group"><label className="form-label">ARI (ADR Index)</label><input className="form-input" type="number" step="0.1" value={dataForm.adr_index} onChange={e=>setD('adr_index',e.target.value)} placeholder="113.9"/></div>
-            </div>
-            <div className="form-group"><label className="form-label">RGI (RevPAR Index)</label><input className="form-input" type="number" step="0.1" value={dataForm.revpar_index} onChange={e=>setD('revpar_index',e.target.value)} placeholder="122.2"/></div>
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button className="btn btn-secondary" onClick={()=>setAddDataModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSaveData} disabled={saving}>{saving?'Saving...':'Save STR Data'}</button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Add Competitor Modal — FIX: asset_id pre-populated and validated */}
