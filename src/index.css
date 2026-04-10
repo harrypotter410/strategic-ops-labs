@@ -438,3 +438,90 @@ html, body { height:100%; font-family:'DM Sans',sans-serif; background:var(--gra
 }
 .login-btn:hover { opacity: 0.9; }
 .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════════════════════════
+   HIGH-TECH UI ENHANCEMENTS
+═══════════════════════════════════════════════════════════ */
+
+/* Subtle dot grid in main content */
+.main {
+  background-color: var(--gray50);
+  background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+[data-theme="dark"] .main {
+  background-color: #111714;
+  background-image: radial-gradient(circle, rgba(74,158,110,0.1) 1px, transparent 1px);
+}
+
+/* Cards — hover glow */
+.card { box-shadow: 0 1px 4px rgba(0,0,0,0.05); transition: border-color .2s, box-shadow .2s; }
+.card:hover { border-color: rgba(74,158,110,0.28); box-shadow: 0 4px 24px rgba(42,110,71,0.08), 0 0 0 1px rgba(74,158,110,0.08); }
+[data-theme="dark"] .card:hover { border-color: rgba(74,158,110,0.2); box-shadow: 0 4px 20px rgba(42,110,71,0.15); }
+
+/* KPI card — gradient top stripe + hover lift */
+.kpi-card::before { background: linear-gradient(90deg, var(--g600) 0%, var(--g400) 60%, #c9a96e 100%); height: 2px; }
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(42,110,71,0.13); border-color: rgba(74,158,110,0.2); }
+.kpi-value { font-variant-numeric: tabular-nums; }
+
+/* Primary button — gradient + glow */
+.btn-primary { background: linear-gradient(135deg, #163d27 0%, #2a6e47 100%); box-shadow: 0 2px 8px rgba(42,110,71,0.22); }
+.btn-primary:hover { opacity: 1; filter: brightness(1.1); box-shadow: 0 4px 18px rgba(42,110,71,0.38); }
+
+/* Topbar — depth shadow */
+.topbar { box-shadow: 0 2px 24px rgba(0,0,0,0.55); background: linear-gradient(180deg, #0a2015 0%, #0d2b1a 100%); }
+
+/* Sidebar — subtle gradient + gold active accent */
+.sidebar { background: linear-gradient(180deg, #112a1b 0%, #0e221a 100%); }
+.nav-link.active { border-left-color: #c9a96e; background: linear-gradient(90deg, rgba(201,169,110,0.13) 0%, rgba(42,110,71,0.06) 100%); color: #fff; }
+
+/* Brand logo icon glow */
+.brand-logo { background: linear-gradient(135deg, #2a6e47, #163d27); box-shadow: 0 0 16px rgba(42,110,71,0.5); }
+
+/* Form input — stronger focus ring */
+.form-input:focus { border-color: var(--g600); box-shadow: 0 0 0 3px rgba(42,110,71,0.13), 0 0 8px rgba(74,158,110,0.08); }
+
+/* Modal — deeper shadow */
+.modal { box-shadow: 0 24px 64px rgba(0,0,0,0.28); }
+
+/* Filter tabs — active uses gold accent */
+.filter-tab.active { background: var(--g700); border-color: var(--g700); box-shadow: 0 2px 10px rgba(42,110,71,0.3); }
+
+/* ── LOGO ANIMATION ──────────────────────────────────────── */
+@keyframes soul-draw     { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes soul-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes soul-glow     { 0%,100% { filter: drop-shadow(0 0 2px rgba(201,169,110,0.5)); }
+                           50%      { filter: drop-shadow(0 0 7px rgba(201,169,110,0.95)); } }
+
+/* Lines draw in sequence — each connects two stars */
+.soul-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: soul-draw 0.45s ease forwards; }
+.soul-l0 { animation-delay: 0.05s; animation-duration: 0.7s;  } /* spine (38,34)→(38,126) */
+.soul-l1 { animation-delay: 0.45s; }                            /* branch → (58,58) */
+.soul-l2 { animation-delay: 0.72s; }                            /* branch → (74,40) ★ */
+.soul-l3 { animation-delay: 0.52s; }                            /* branch → (58,102) */
+.soul-l4 { animation-delay: 0.82s; }                            /* branch → (74,120) ★ */
+.soul-l5 { animation-delay: 1.05s; animation-duration: 0.5s; } /* right cluster → (96,90) */
+.soul-l6 { animation-delay: 1.52s; }                            /* → (106,64) */
+.soul-l7 { animation-delay: 1.82s; }                            /* → (116,90) */
+.soul-l8 { animation-delay: 2.10s; animation-duration: 0.5s; } /* → (126,38) ★ final star */
+
+/* Stars/nodes appear as lines reach them */
+.soul-node { opacity: 0; animation: soul-fade-in 0.35s ease forwards; }
+.soul-n0  { animation-delay: 0.05s; }  /* (38,34)  spine top    */
+.soul-n1  { animation-delay: 0.40s; }  /* (38,80)  spine mid    */
+.soul-n2  { animation-delay: 0.74s; }  /* (38,126) spine bottom */
+.soul-n3  { animation-delay: 0.90s; }  /* (58,58)  junction     */
+.soul-n4  { animation-delay: 1.17s; }  /* (74,40)  gold star ★  */
+.soul-n5  { animation-delay: 0.97s; }  /* (58,102) junction     */
+.soul-n6  { animation-delay: 1.27s; }  /* (74,120) gold star ★  */
+.soul-n7  { animation-delay: 1.05s; }  /* (86,38)  right start  */
+.soul-n8  { animation-delay: 1.55s; }  /* (96,90)               */
+.soul-n9  { animation-delay: 1.83s; }  /* (106,64) junction     */
+.soul-n10 { animation-delay: 2.13s; }  /* (116,90)              */
+.soul-n11 { animation-delay: 2.60s; }  /* (126,38) final star ★ */
+
+/* Gold nodes pulse with glow after drawing completes */
+.soul-node.soul-pulse {
+  animation: soul-fade-in 0.35s ease forwards,
+             soul-glow 3.5s ease-in-out 3s infinite;
+}

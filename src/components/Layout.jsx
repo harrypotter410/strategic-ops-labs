@@ -7,27 +7,30 @@ import QuickAdd from './QuickAdd'
 
 const Logo = () => (
   <svg width="20" height="20" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <line x1="38" y1="34" x2="38" y2="126" stroke="#163d27" strokeWidth="2" opacity="0.8"/>
-    <line x1="38" y1="80" x2="58" y2="58" stroke="#a8d5bc" strokeWidth="1.5" opacity="0.5"/>
-    <line x1="58" y1="58" x2="74" y2="40" stroke="#a8d5bc" strokeWidth="1.5" opacity="0.4"/>
-    <line x1="38" y1="80" x2="58" y2="102" stroke="#a8d5bc" strokeWidth="1.5" opacity="0.5"/>
-    <line x1="58" y1="102" x2="74" y2="120" stroke="#a8d5bc" strokeWidth="1.5" opacity="0.4"/>
-    <line x1="86" y1="38" x2="96" y2="90" stroke="#a8d5bc" strokeWidth="1.5" opacity="0.5"/>
-    <line x1="96" y1="90" x2="106" y2="64" stroke="#a8d5bc" strokeWidth="1.5" opacity="0.5"/>
-    <line x1="106" y1="64" x2="116" y2="90" stroke="#a8d5bc" strokeWidth="1.5" opacity="0.5"/>
-    <line x1="116" y1="90" x2="126" y2="38" stroke="#a8d5bc" strokeWidth="1.5" opacity="0.5"/>
-    <circle cx="38" cy="34" r="7" fill="#c9a96e"/>
-    <circle cx="38" cy="80" r="6" fill="#c9a96e"/>
-    <circle cx="38" cy="126" r="7" fill="#c9a96e"/>
-    <circle cx="58" cy="58" r="4.5" fill="#a8d5bc" opacity="0.7"/>
-    <circle cx="74" cy="40" r="6" fill="#c9a96e"/>
-    <circle cx="58" cy="102" r="4.5" fill="#a8d5bc" opacity="0.7"/>
-    <circle cx="74" cy="120" r="6" fill="#c9a96e"/>
-    <circle cx="86" cy="38" r="7" fill="#c9a96e"/>
-    <circle cx="96" cy="90" r="6" fill="#c9a96e"/>
-    <circle cx="106" cy="64" r="4.5" fill="#a8d5bc" opacity="0.7"/>
-    <circle cx="116" cy="90" r="6" fill="#c9a96e"/>
-    <circle cx="126" cy="38" r="7" fill="#c9a96e"/>
+    {/* Lines — draw in sequence, connecting each star */}
+    <line className="soul-line soul-l0" pathLength="1" x1="38" y1="34" x2="38" y2="126" stroke="#163d27" strokeWidth="2"/>
+    <line className="soul-line soul-l1" pathLength="1" x1="38" y1="80" x2="58" y2="58" stroke="#a8d5bc" strokeWidth="1.5"/>
+    <line className="soul-line soul-l2" pathLength="1" x1="58" y1="58" x2="74" y2="40" stroke="#a8d5bc" strokeWidth="1.5"/>
+    <line className="soul-line soul-l3" pathLength="1" x1="38" y1="80" x2="58" y2="102" stroke="#a8d5bc" strokeWidth="1.5"/>
+    <line className="soul-line soul-l4" pathLength="1" x1="58" y1="102" x2="74" y2="120" stroke="#a8d5bc" strokeWidth="1.5"/>
+    <line className="soul-line soul-l5" pathLength="1" x1="86" y1="38" x2="96" y2="90" stroke="#a8d5bc" strokeWidth="1.5"/>
+    <line className="soul-line soul-l6" pathLength="1" x1="96" y1="90" x2="106" y2="64" stroke="#a8d5bc" strokeWidth="1.5"/>
+    <line className="soul-line soul-l7" pathLength="1" x1="106" y1="64" x2="116" y2="90" stroke="#a8d5bc" strokeWidth="1.5"/>
+    <line className="soul-line soul-l8" pathLength="1" x1="116" y1="90" x2="126" y2="38" stroke="#a8d5bc" strokeWidth="1.5"/>
+    {/* Stars/nodes — appear as lines reach them */}
+    <circle className="soul-node soul-n0 soul-pulse" cx="38" cy="34" r="7" fill="#c9a96e"/>
+    <circle className="soul-node soul-n1 soul-pulse" cx="38" cy="80" r="6" fill="#c9a96e"/>
+    <circle className="soul-node soul-n2 soul-pulse" cx="38" cy="126" r="7" fill="#c9a96e"/>
+    <circle className="soul-node soul-n3" cx="58" cy="58" r="4.5" fill="#a8d5bc"/>
+    <circle className="soul-node soul-n4 soul-pulse" cx="74" cy="40" r="6" fill="#c9a96e"/>
+    <circle className="soul-node soul-n5" cx="58" cy="102" r="4.5" fill="#a8d5bc"/>
+    <circle className="soul-node soul-n6 soul-pulse" cx="74" cy="120" r="6" fill="#c9a96e"/>
+    <circle className="soul-node soul-n7 soul-pulse" cx="86" cy="38" r="7" fill="#c9a96e"/>
+    <circle className="soul-node soul-n8 soul-pulse" cx="96" cy="90" r="6" fill="#c9a96e"/>
+    <circle className="soul-node soul-n9" cx="106" cy="64" r="4.5" fill="#a8d5bc"/>
+    <circle className="soul-node soul-n10 soul-pulse" cx="116" cy="90" r="6" fill="#c9a96e"/>
+    <circle className="soul-node soul-n11 soul-pulse" cx="126" cy="38" r="7" fill="#c9a96e"/>
+    {/* Accent dots */}
     <circle cx="22" cy="56" r="2.5" fill="#4a9e6e" opacity="0.4"/>
     <circle cx="22" cy="104" r="2.5" fill="#4a9e6e" opacity="0.3"/>
     <circle cx="140" cy="56" r="2.5" fill="#4a9e6e" opacity="0.3"/>
