@@ -108,20 +108,20 @@ create policy "authenticated write checklist" on public.deal_checklist for all t
 create policy "authenticated read comp" on public.comp_data for select to authenticated using (true);
 create policy "authenticated write comp" on public.comp_data for all to authenticated using (true);
 
--- SEED DATA (sample portfolio)
+-- SEED DATA (anonymized — codenames used in place of real property/deal names)
 insert into public.assets (name, type, market, rooms, status, brand, year_acquired, acquisition_price, current_value) values
-  ('The Peabody Memphis', 'hotel', 'Memphis, TN', 464, 'active', 'Independent', 2018, 95000000, 142000000),
-  ('Embassy Suites Nashville', 'hotel', 'Nashville, TN', 208, 'active', 'Hilton', 2019, 58000000, 78000000),
-  ('Gulf Shores Resort', 'resort', 'Gulf Shores, AL', 312, 'active', 'Independent', 2020, 88000000, 124000000),
-  ('Hilton Garden Inn Atlanta', 'hotel', 'Atlanta, GA', 196, 'active', 'Hilton', 2017, 42000000, 54000000),
-  ('Courtyard Birmingham', 'hotel', 'Birmingham, AL', 168, 'active', 'Marriott', 2021, 31000000, 38000000),
-  ('Sandestin Beach Club', 'resort', 'Destin, FL', 280, 'active', 'Independent', 2022, 105000000, 118000000),
-  ('Midtown Mixed-Use', 'mixed', 'Atlanta, GA', null, 'review', null, 2023, 38000000, 41000000),
-  ('Brentwood Suites', 'hotel', 'Brentwood, TN', 142, 'renovation', 'IHG', 2022, 24000000, 28000000);
+  ('Project Mallard',   'hotel',  'West Tennessee',      464, 'active',     'Independent', 2018, 95000000, 142000000),
+  ('Project Harmony',   'hotel',  'Middle Tennessee',    208, 'active',     'Flag A',      2019, 58000000,  78000000),
+  ('Project Shoreline', 'resort', 'Coastal Alabama',     312, 'active',     'Independent', 2020, 88000000, 124000000),
+  ('Project Ironwood',  'hotel',  'Metro Georgia',       196, 'active',     'Flag A',      2017, 42000000,  54000000),
+  ('Project Forge',     'hotel',  'Central Alabama',     168, 'active',     'Flag B',      2021, 31000000,  38000000),
+  ('Project Dune',      'resort', 'Northwest Florida',   280, 'active',     'Independent', 2022, 105000000,118000000),
+  ('Project Canvas',    'mixed',  'Metro Georgia',      null, 'review',     null,           2023, 38000000,  41000000),
+  ('Project Briarwood', 'hotel',  'Suburban Tennessee',  142, 'renovation', 'Flag C',      2022, 24000000,  28000000);
 
 insert into public.deals (name, market, type, rooms, ask_price, price_per_key, cap_rate, stage, score, expected_close) values
-  ('Savannah Historic Inn', 'Savannah, GA', 'hotel', 88, 19000000, 215909, 6.8, 'prospecting', 62, null),
-  ('Knoxville Downtown Hotel', 'Knoxville, TN', 'hotel', 160, 42000000, 262500, 5.9, 'prospecting', 55, null),
-  ('Destin Waterfront Resort', 'Destin, FL', 'resort', 280, 65000000, 232143, 7.1, 'loi', 74, '2026-06-30'),
-  ('Chattanooga Boutique', 'Chattanooga, TN', 'hotel', 140, 28000000, 200000, 7.8, 'due_diligence', 81, '2026-05-15'),
-  ('Brentwood Mixed-Use', 'Brentwood, TN', 'commercial', null, 42000000, null, 6.2, 'closing', 91, '2026-04-01');
+  ('Project Magnolia',    'Coastal Georgia',    'hotel',      88, 19000000, 215909, 6.8, 'prospecting',   62, null),
+  ('Project Summit',      'East Tennessee',     'hotel',     160, 42000000, 262500, 5.9, 'prospecting',   55, null),
+  ('Project Tidewater',   'Northwest Florida',  'resort',    280, 65000000, 232143, 7.1, 'loi',           74, '2026-06-30'),
+  ('Project Lookout',     'Southeast Tennessee','hotel',     140, 28000000, 200000, 7.8, 'due_diligence', 81, '2026-05-15'),
+  ('Project Cornerstone', 'Suburban Tennessee', 'commercial',null, 42000000, null,  6.2, 'closing',       91, '2026-04-01');
