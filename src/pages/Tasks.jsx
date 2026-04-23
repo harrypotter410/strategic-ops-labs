@@ -1,31 +1,44 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAssets, useDeals } from '../hooks/useData'
+import { useAssets } from '../hooks/useData'
 
-const PRIORITIES = { low: { label: 'Low', color: 'var(--gray500)', bg: 'var(--gray100)' }, medium: { label: 'Medium', color: 'var(--blue)', bg: 'var(--blueL)' }, high: { label: 'High', color: 'var(--amber)', bg: 'var(--amberL)' }, urgent: { label: 'Urgent', color: 'var(--red)', bg: 'var(--redL)' } }
-const STATUSES = { open: 'Open', in_progress: 'In Progress', done: 'Done', cancelled: 'Cancelled' }
+const STATUSES   = ['Not Started', 'Ongoing', 'Complete']
+const FUND_ORDER = ['KWHP I', 'KWHP II', 'Other']
+
+const STATUS_STYLE = {
+  'Complete':    { color: '#4a9e6e', bg: 'rgba(74,158,110,0.15)',  border: 'rgba(74,158,110,0.35)' },
+  'Ongoing':     { color: '#d4a84b', bg: 'rgba(212,168,75,0.12)',  border: 'rgba(212,168,75,0.35)' },
+  'Not Started': { color: '#6b9e80', bg: 'rgba(107,158,128,0.08)', border: 'rgba(107,158,128,0.2)' },
+}
+
+// ── Data hook ─────────────────────────────────────────────────────────────────
 
 function useTasks() {
-  const [tasks, setTasks] = useState([])
+  const [tasks, setTasks]   = useState([])
   const [loading, setLoading] = useState(true)
 
-  const fetch = async () => {
+  const load = async () => {
     setLoading(true)
-    const { data } = await supabase.from('tasks').select('*, assets(name), deals(name)').order('due_date', { ascending: true, nullsFirst: false }).order('priority', { ascending: false })
+    const { data } = await supabase
+      .from('tasks')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at',  { ascending: true })
     setTasks(data || [])
     setLoading(false)
   }
 
-  useEffect(() => { fetch() }, [])
+  useEffect(() => { load() }, [])
 
-  const save = async (task) => {
-    if (task.id) {
-      const { data, error } = await supabase.from('tasks').update(task).eq('id', task.id).select('*, assets(name), deals(name)').single()
-      if (!error) setTasks(prev => prev.map(t => t.id === task.id ? data : t))
+  const upsert = async (task) => {
+    const { id, ...rest } = task
+    if (id) {
+      const { data, error } = await supabase.from('tasks').update(rest).eq('id', id).select().single()
+      if (!error) setTasks(prev => prev.map(t => t.id === id ? data : t))
       return { data, error }
     } else {
-      const { data, error } = await supabase.from('tasks').insert(task).select('*, assets(name), deals(name)').single()
-      if (!error) setTasks(prev => [data, ...prev])
+      const { data, error } = await supabase.from('tasks').insert(rest).select().single()
+      if (!error) setTasks(prev => [...prev, data])
       return { data, error }
     }
   }
@@ -35,179 +48,367 @@ function useTasks() {
     setTasks(prev => prev.filter(t => t.id !== id))
   }
 
-  const toggle = async (task) => {
-    const next = task.status === 'done' ? 'open' : 'done'
-    const updates = { status: next, completed_at: next === 'done' ? new Date().toISOString() : null }
-    const { data } = await supabase.from('tasks').update(updates).eq('id', task.id).select('*, assets(name), deals(name)').single()
-    if (data) setTasks(prev => prev.map(t => t.id === task.id ? data : t))
-  }
-
-  return { tasks, loading, save, remove, toggle, refetch: fetch }
+  return { tasks, loading, upsert, remove }
 }
 
-function TaskModal({ task, assets, deals, onClose, onSave }) {
-  const [form, setForm] = useState(task ? { ...task } : {
-    title: '', description: '', due_date: '', priority: 'medium',
-    status: 'open', asset_id: '', deal_id: '', assigned_to: '',
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtDate(d) {
+  if (!d) return ''
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+const tdSt = { padding: '8px 10px', verticalAlign: 'middle' }
+const thSt = {
+  padding: '5px 10px', fontSize: 10, color: '#4a9e6e', letterSpacing: '.08em',
+  textTransform: 'uppercase', textAlign: 'left', fontWeight: 600,
+  borderBottom: '1px solid rgba(74,158,110,0.2)',
+}
+
+// ── Status dropdown ───────────────────────────────────────────────────────────
+
+function StatusCell({ status, onChange }) {
+  const s = STATUS_STYLE[status] || STATUS_STYLE['Not Started']
+  return (
+    <select
+      value={status || 'Not Started'}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+        borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600,
+        cursor: 'pointer', outline: 'none', appearance: 'none', WebkitAppearance: 'none',
+      }}
+    >
+      {STATUSES.map(sv => <option key={sv} value={sv}>{sv}</option>)}
+    </select>
+  )
+}
+
+// ── Task row ──────────────────────────────────────────────────────────────────
+
+function TaskRow({ task, onSave, onDelete }) {
+  const [editing, setEditing] = useState(false)
+  const [form, setForm]       = useState({ ...task })
+  const [hovered, setHovered] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  const handleSubmit = async () => {
-    if (!form.title.trim()) { setError('Title is required'); return }
-    setLoading(true)
-    const payload = { ...form, asset_id: form.asset_id || null, deal_id: form.deal_id || null, due_date: form.due_date || null }
-    const { error } = await onSave(payload)
-    if (error) { setError(error.message); setLoading(false); return }
-    setLoading(false); onClose()
+  const handleStatusChange = async (newStatus) => {
+    await onSave({ ...task, status: newStatus })
+  }
+
+  const handleSave = async () => {
+    await onSave(form)
+    setEditing(false)
+  }
+
+  const handleCancel = () => {
+    setForm({ ...task })
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <tr style={{ background: 'rgba(74,158,110,0.05)' }}>
+        <td style={tdSt}>
+          <input type="date" className="form-input" value={form.due_date || ''}
+            onChange={e => set('due_date', e.target.value)}
+            style={{ padding: '3px 6px', fontSize: 12, width: 130 }} />
+        </td>
+        <td style={tdSt}>
+          <input className="form-input" value={form.item}
+            onChange={e => set('item', e.target.value)}
+            style={{ padding: '3px 6px', fontSize: 12, width: '100%' }} autoFocus />
+        </td>
+        <td style={tdSt}>
+          <input className="form-input" value={form.poc || ''}
+            onChange={e => set('poc', e.target.value.toUpperCase())}
+            style={{ padding: '3px 6px', fontSize: 12, width: 52 }} placeholder="DR" />
+        </td>
+        <td style={tdSt}>
+          <select className="form-input" value={form.status || 'Not Started'}
+            onChange={e => set('status', e.target.value)}
+            style={{ padding: '3px 6px', fontSize: 12 }}>
+            {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </td>
+        <td style={tdSt}>
+          <input className="form-input" value={form.update_notes || ''}
+            onChange={e => set('update_notes', e.target.value)}
+            style={{ padding: '3px 6px', fontSize: 12, width: '100%' }} />
+        </td>
+        <td style={{ ...tdSt, whiteSpace: 'nowrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={handleSave}
+            style={{ marginRight: 4, fontSize: 11 }}>Save</button>
+          <button className="btn btn-sm" onClick={handleCancel}
+            style={{ fontSize: 11 }}>Cancel</button>
+        </td>
+      </tr>
+    )
+  }
+
+  const isComplete = task.status === 'Complete'
+
+  return (
+    <tr
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        borderBottom: '1px solid rgba(74,158,110,0.08)',
+        background: hovered ? 'rgba(74,158,110,0.03)' : 'transparent',
+        transition: 'background 0.1s',
+      }}
+    >
+      <td style={{ ...tdSt, color: '#6b9e80', fontSize: 12, whiteSpace: 'nowrap' }}>
+        {fmtDate(task.due_date)}
+      </td>
+      <td style={{ ...tdSt, maxWidth: 380 }}>
+        <span style={{
+          fontSize: 13,
+          color: isComplete ? '#4a9e6e' : '#e8f5ee',
+          textDecoration: isComplete ? 'line-through' : 'none',
+          opacity: isComplete ? 0.65 : 1,
+        }}>
+          {task.item}
+        </span>
+      </td>
+      <td style={{ ...tdSt, fontSize: 12, fontWeight: 700, color: '#4a9e6e', letterSpacing: '.06em' }}>
+        {task.poc}
+      </td>
+      <td style={tdSt}>
+        <StatusCell status={task.status} onChange={handleStatusChange} />
+      </td>
+      <td style={{ ...tdSt, fontSize: 12, color: '#6b9e80', maxWidth: 280 }}>
+        {task.update_notes}
+      </td>
+      <td style={{ ...tdSt, whiteSpace: 'nowrap', opacity: hovered ? 1 : 0, transition: 'opacity 0.15s' }}>
+        <button className="card-action" onClick={() => setEditing(true)}
+          style={{ fontSize: 11 }}>Edit</button>
+        <button className="card-action" onClick={() => onDelete(task.id)}
+          style={{ color: '#f87171', marginLeft: 4, fontSize: 11 }}>✕</button>
+      </td>
+    </tr>
+  )
+}
+
+// ── Add-row form ──────────────────────────────────────────────────────────────
+
+function AddTaskRow({ assetId, onSave, onCancel }) {
+  const [form, setForm] = useState({
+    asset_id: assetId, item: '', poc: '', due_date: '', status: 'Not Started', update_notes: '',
+  })
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSave = () => {
+    if (!form.item.trim()) return
+    onSave(form)
   }
 
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-header">
-          <span className="modal-title">{task ? 'Edit Task' : 'Add Task'}</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
+    <tr style={{ background: 'rgba(74,158,110,0.04)', borderBottom: '1px solid rgba(74,158,110,0.1)' }}>
+      <td style={tdSt}>
+        <input type="date" className="form-input" value={form.due_date}
+          onChange={e => set('due_date', e.target.value)}
+          style={{ padding: '3px 6px', fontSize: 12, width: 130 }} />
+      </td>
+      <td style={tdSt}>
+        <input className="form-input" value={form.item}
+          onChange={e => set('item', e.target.value)}
+          placeholder="New action item…"
+          style={{ padding: '3px 6px', fontSize: 12, width: '100%' }}
+          autoFocus
+          onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onCancel() }} />
+      </td>
+      <td style={tdSt}>
+        <input className="form-input" value={form.poc}
+          onChange={e => set('poc', e.target.value.toUpperCase())}
+          style={{ padding: '3px 6px', fontSize: 12, width: 52 }} placeholder="DR" />
+      </td>
+      <td style={tdSt}>
+        <select className="form-input" value={form.status}
+          onChange={e => set('status', e.target.value)}
+          style={{ padding: '3px 6px', fontSize: 12 }}>
+          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </td>
+      <td style={tdSt}>
+        <input className="form-input" value={form.update_notes}
+          onChange={e => set('update_notes', e.target.value)}
+          style={{ padding: '3px 6px', fontSize: 12, width: '100%' }} />
+      </td>
+      <td style={{ ...tdSt, whiteSpace: 'nowrap' }}>
+        <button className="btn btn-primary btn-sm" onClick={handleSave}
+          style={{ marginRight: 4, fontSize: 11 }}>Add</button>
+        <button className="btn btn-sm" onClick={onCancel}
+          style={{ fontSize: 11 }}>Cancel</button>
+      </td>
+    </tr>
+  )
+}
+
+// ── Asset block ───────────────────────────────────────────────────────────────
+
+function AssetBlock({ asset, tasks, onSave, onDelete }) {
+  const [addingRow, setAddingRow] = useState(false)
+
+  const handleAdd = async (task) => {
+    await onSave(task)
+    setAddingRow(false)
+  }
+
+  const complete = tasks.filter(t => t.status === 'Complete').length
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid rgba(74,158,110,0.18)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#e8f5ee', letterSpacing: '.02em' }}>
+            {asset.name}
+          </span>
+          {asset.mvp_captain && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, color: '#4a9e6e',
+              background: 'rgba(74,158,110,0.1)', border: '1px solid rgba(74,158,110,0.2)',
+              padding: '2px 9px', borderRadius: 10, letterSpacing: '.06em',
+            }}>
+              MVP · {asset.mvp_captain}
+            </span>
+          )}
+          {tasks.length > 0 && (
+            <span style={{ fontSize: 11, color: '#4a9e6e', opacity: 0.6 }}>
+              {complete}/{tasks.length} complete
+            </span>
+          )}
         </div>
-        {error && <div style={{ background: 'var(--redL)', color: 'var(--red)', padding: '8px 12px', borderRadius: 7, fontSize: 12, marginBottom: 12 }}>{error}</div>}
-        <div className="form-group"><label className="form-label">Task Title *</label><input className="form-input" value={form.title} onChange={e => set('title', e.target.value)} placeholder="Follow up with CBRE on Destin deal" /></div>
-        <div className="form-group"><label className="form-label">Description</label><textarea className="form-input" rows={2} value={form.description} onChange={e => set('description', e.target.value)} style={{ resize: 'vertical' }} /></div>
-        <div className="form-grid-2">
-          <div className="form-group"><label className="form-label">Priority</label>
-            <select className="form-select" value={form.priority} onChange={e => set('priority', e.target.value)}>
-              {Object.entries(PRIORITIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
-          </div>
-          <div className="form-group"><label className="form-label">Due Date</label><input className="form-input" type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} /></div>
-        </div>
-        <div className="form-grid-2">
-          <div className="form-group"><label className="form-label">Link to Asset</label>
-            <select className="form-select" value={form.asset_id} onChange={e => set('asset_id', e.target.value)}>
-              <option value="">No asset</option>
-              {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
-          <div className="form-group"><label className="form-label">Link to Deal</label>
-            <select className="form-select" value={form.deal_id} onChange={e => set('deal_id', e.target.value)}>
-              <option value="">No deal</option>
-              {deals.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="form-group"><label className="form-label">Assigned To</label><input className="form-input" value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} placeholder="Bear Hutchinson" /></div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>{loading ? 'Saving...' : task ? 'Save Changes' : 'Add Task'}</button>
-        </div>
+        <button className="btn btn-sm" onClick={() => setAddingRow(true)}
+          style={{ fontSize: 11, padding: '3px 10px' }}>
+          + Add item
+        </button>
       </div>
+
+      {(tasks.length > 0 || addingRow) ? (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...thSt, width: 100 }}>Timeline</th>
+              <th style={thSt}>Item</th>
+              <th style={{ ...thSt, width: 60 }}>POC</th>
+              <th style={{ ...thSt, width: 130 }}>Status</th>
+              <th style={thSt}>Update</th>
+              <th style={{ ...thSt, width: 100 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {tasks.map(t => (
+              <TaskRow key={t.id} task={t} onSave={onSave} onDelete={onDelete} />
+            ))}
+            {addingRow && (
+              <AddTaskRow assetId={asset.id} onSave={handleAdd} onCancel={() => setAddingRow(false)} />
+            )}
+          </tbody>
+        </table>
+      ) : (
+        <div style={{ padding: '8px 10px', color: '#4a9e6e', fontSize: 12, opacity: 0.5 }}>
+          No items yet — click + Add item to start tracking.
+        </div>
+      )}
     </div>
   )
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function Tasks() {
-  const { tasks, loading, save, remove, toggle } = useTasks()
-  const { assets } = useAssets()
-  const { deals } = useDeals()
-  const [modal, setModal] = useState(null)
-  const [filter, setFilter] = useState('open')
-  const [priorityFilter, setPriorityFilter] = useState('all')
+  const { tasks, loading: tasksLoading, upsert, remove } = useTasks()
+  const { assets, loading: assetsLoading } = useAssets()
 
-  const filtered = tasks.filter(t => {
-    if (filter === 'open' && (t.status === 'done' || t.status === 'cancelled')) return false
-    if (filter === 'done' && t.status !== 'done') return false
-    if (filter === 'all') {}
-    if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false
-    return true
-  })
+  const loading = tasksLoading || assetsLoading
 
-  const overdue = tasks.filter(t => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done' && t.status !== 'cancelled')
-  const dueToday = tasks.filter(t => t.due_date && new Date(t.due_date).toDateString() === new Date().toDateString() && t.status !== 'done')
-  const open = tasks.filter(t => t.status === 'open' || t.status === 'in_progress')
-  const done = tasks.filter(t => t.status === 'done')
+  const assetsByFund = FUND_ORDER.reduce((acc, fund) => {
+    acc[fund] = assets.filter(a => (a.fund || 'Other') === fund)
+    return acc
+  }, {})
 
-  const isOverdue = (t) => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done' && t.status !== 'cancelled'
+  const tasksByAsset = tasks.reduce((acc, t) => {
+    if (!t.asset_id) return acc
+    if (!acc[t.asset_id]) acc[t.asset_id] = []
+    acc[t.asset_id].push(t)
+    return acc
+  }, {})
 
-  if (loading) return <div className="loading">Loading tasks...</div>
+  const notStarted = tasks.filter(t => t.status === 'Not Started').length
+  const ongoing    = tasks.filter(t => t.status === 'Ongoing').length
+  const complete   = tasks.filter(t => t.status === 'Complete').length
+
+  if (loading) return <div className="loading">Loading...</div>
+
+  const hasFundAssets = FUND_ORDER.some(f => (assetsByFund[f] || []).length > 0)
 
   return (
     <div>
       <div className="page-header">
-        <h1>Tasks</h1>
-        <p>Action items across your portfolio and pipeline</p>
+        <div>
+          <h1 className="page-title">30.60.90 Priorities</h1>
+          <p className="page-subtitle">Q1 2026 · Action items by asset and fund</p>
+        </div>
       </div>
 
       <div className="kpi-grid">
-        <div className="kpi-card"><div className="kpi-label">Open Tasks</div><div className="kpi-value">{open.length}</div><div className="kpi-change">Across portfolio & deals</div></div>
-        <div className="kpi-card"><div className="kpi-label">Overdue</div><div className="kpi-value" style={{ color: overdue.length > 0 ? 'var(--red)' : 'var(--g900)' }}>{overdue.length}</div><div className={`kpi-change${overdue.length > 0 ? ' down' : ''}`}>{overdue.length > 0 ? 'Need attention' : 'All on track'}</div></div>
-        <div className="kpi-card"><div className="kpi-label">Due Today</div><div className="kpi-value">{dueToday.length}</div><div className="kpi-change">Action required today</div></div>
-        <div className="kpi-card"><div className="kpi-label">Completed</div><div className="kpi-value">{done.length}</div><div className="kpi-change">Total closed tasks</div></div>
+        <div className="kpi-card">
+          <div className="kpi-label">Not Started</div>
+          <div className="kpi-value">{notStarted}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Ongoing</div>
+          <div className="kpi-value" style={{ color: '#d4a84b' }}>{ongoing}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Complete</div>
+          <div className="kpi-value" style={{ color: '#4a9e6e' }}>{complete}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Total Items</div>
+          <div className="kpi-value">{tasks.length}</div>
+        </div>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, flexWrap: 'wrap' }}>
-            <span className="card-title">All tasks</span>
-            <div className="filter-tabs" style={{ margin: 0 }}>
-              {[['open','Open'],['done','Done'],['all','All']].map(([v,l]) => <button key={v} className={`filter-tab${filter===v?' active':''}`} onClick={() => setFilter(v)}>{l}</button>)}
+      {!hasFundAssets ? (
+        <div className="card">
+          <div className="empty-state">
+            <div className="empty-state-icon">📋</div>
+            <div className="empty-state-title">Assign assets to a fund to get started</div>
+            <div className="empty-state-desc">
+              Set a <code>fund</code> column value (KWHP I, KWHP II, or Other) on your assets
+              in Supabase, then items will appear here grouped by fund.
             </div>
-            <div className="filter-tabs" style={{ margin: 0 }}>
-              {[['all','All'],['urgent','Urgent'],['high','High'],['medium','Medium'],['low','Low']].map(([v,l]) => (
-                <button key={v} className={`filter-tab${priorityFilter===v?' active':''}`} onClick={() => setPriorityFilter(v)}>{l}</button>
+          </div>
+        </div>
+      ) : (
+        FUND_ORDER.map(fund => {
+          const fundAssets = assetsByFund[fund]
+          if (!fundAssets || fundAssets.length === 0) return null
+          return (
+            <div key={fund} className="card" style={{ marginBottom: 24 }}>
+              <div className="card-header" style={{ marginBottom: 20 }}>
+                <h2 className="card-title" style={{ fontSize: 16, letterSpacing: '.04em' }}>
+                  {fund}
+                </h2>
+              </div>
+              {fundAssets.map(asset => (
+                <AssetBlock
+                  key={asset.id}
+                  asset={asset}
+                  tasks={tasksByAsset[asset.id] || []}
+                  onSave={upsert}
+                  onDelete={remove}
+                />
               ))}
             </div>
-          </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setModal({})}>+ Add Task</button>
-        </div>
-
-        {filtered.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">✅</div>
-            <div className="empty-state-title">{filter === 'open' ? 'No open tasks' : 'No tasks'}</div>
-            <div className="empty-state-desc">Add action items to track follow-ups, deadlines, and next steps.</div>
-            <button className="btn btn-primary" onClick={() => setModal({})}>+ Add Task</button>
-          </div>
-        ) : (
-          <div>
-            {filtered.map(task => {
-              const p = PRIORITIES[task.priority]
-              const overdue = isOverdue(task)
-              return (
-                <div key={task.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--gray100)' }}>
-                  {/* Checkbox */}
-                  <div
-                    style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${task.status === 'done' ? 'var(--g400)' : 'var(--gray300)'}`, background: task.status === 'done' ? 'var(--g100)' : 'var(--white)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginTop: 2, transition: 'all .12s' }}
-                    onClick={() => toggle(task)}
-                  >
-                    {task.status === 'done' && <span style={{ fontSize: 10, color: 'var(--g600)' }}>✓</span>}
-                  </div>
-
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: task.status === 'done' ? 'var(--gray500)' : 'var(--g900)', textDecoration: task.status === 'done' ? 'line-through' : 'none' }}>{task.title}</span>
-                      <span style={{ fontSize: 9, fontWeight: 500, padding: '2px 7px', borderRadius: 10, background: p.bg, color: p.color, letterSpacing: '.04em', textTransform: 'uppercase' }}>{p.label}</span>
-                      {task.assets?.name && <span style={{ fontSize: 10, color: 'var(--g600)', background: 'var(--g50)', padding: '1px 7px', borderRadius: 10 }}>🏨 {task.assets.name}</span>}
-                      {task.deals?.name && <span style={{ fontSize: 10, color: 'var(--blue)', background: 'var(--blueL)', padding: '1px 7px', borderRadius: 10 }}>💼 {task.deals.name}</span>}
-                    </div>
-                    {task.description && <div style={{ fontSize: 12, color: 'var(--gray500)', marginBottom: 3 }}>{task.description}</div>}
-                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--gray500)', flexWrap: 'wrap' }}>
-                      {task.due_date && <span style={{ color: overdue ? 'var(--red)' : 'var(--gray500)', fontWeight: overdue ? 500 : 400 }}>{overdue ? '⚠ Overdue · ' : '📅 '}{new Date(task.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
-                      {task.assigned_to && <span>👤 {task.assigned_to}</span>}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button className="card-action" onClick={() => setModal(task)}>Edit</button>
-                    <button className="card-action" style={{ color: 'var(--red)' }} onClick={() => remove(task.id)}>Delete</button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {modal !== null && <TaskModal task={modal?.id ? modal : null} assets={assets} deals={deals} onClose={() => setModal(null)} onSave={save} />}
+          )
+        })
+      )}
     </div>
   )
 }

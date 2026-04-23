@@ -26,7 +26,7 @@ export default function Overview() {
   const [activity, setActivity] = useState([])
 
   useEffect(() => {
-    supabase.from('tasks').select('*').in('status',['open','in_progress']).order('due_date',{ascending:true,nullsFirst:false}).limit(5).then(({data})=>setTasks(data||[]))
+    supabase.from('tasks').select('*, assets(name)').in('status',['Not Started','Ongoing']).order('due_date',{ascending:true,nullsFirst:false}).limit(5).then(({data})=>setTasks(data||[]))
     supabase.from('asset_debt').select('*, assets(name)').order('maturity_date',{ascending:true}).then(({data})=>setDebt(data||[]))
     supabase.from('activity_stream').select('*').order('created_at',{ascending:false}).limit(8).then(({data})=>setActivity(data||[]))
   }, [])
@@ -60,7 +60,7 @@ export default function Overview() {
     const days = Math.ceil((new Date(d.maturity_date)-new Date())/(1000*60*60*24))
     return days >= 0 && days <= 365
   })
-  const overdueTasks = tasks.filter(t => t.due_date && new Date(t.due_date) < new Date())
+  const overdueTasks = tasks.filter(t => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'Complete')
 
   return (
     <div>
@@ -168,22 +168,27 @@ export default function Overview() {
 
         {/* Tasks */}
         <div className="card" style={{marginBottom:0}}>
-          <div className="card-header"><span className="card-title">Open tasks</span><Link to="/tasks"><button className="card-action">All →</button></Link></div>
+          <div className="card-header"><span className="card-title">Open priorities</span><Link to="/tasks"><button className="card-action">All →</button></Link></div>
           {tasks.length===0?(
-            <div style={{fontSize:12,color:'var(--gray500)',textAlign:'center',padding:'20px 0'}}>No open tasks</div>
+            <div style={{fontSize:12,color:'var(--gray500)',textAlign:'center',padding:'20px 0'}}>No open items</div>
           ):tasks.map(t=>{
             const isOverdue=t.due_date&&new Date(t.due_date)<new Date()
+            const statusColor = t.status==='Ongoing' ? 'var(--amber)' : 'var(--gray500)'
             return (
               <div key={t.id} style={{display:'flex',gap:8,padding:'7px 0',borderBottom:'1px solid var(--gray100)',alignItems:'flex-start'}}>
                 <div style={{width:12,height:12,borderRadius:3,border:'1.5px solid var(--gray300)',flexShrink:0,marginTop:2}}/>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,color:'var(--g900)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title}</div>
-                  {t.due_date&&<div style={{fontSize:10,color:isOverdue?'var(--red)':'var(--gray500)'}}>{isOverdue?'⚠ ':''}{new Date(t.due_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>}
+                  <div style={{fontSize:12,color:'var(--g900)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.item}</div>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    {t.assets?.name&&<span style={{fontSize:10,color:'var(--gray500)'}}>{t.assets.name}</span>}
+                    {t.poc&&<span style={{fontSize:10,fontWeight:700,color:'#4a9e6e'}}>{t.poc}</span>}
+                    {t.due_date&&<span style={{fontSize:10,color:isOverdue?'var(--red)':statusColor}}>{isOverdue?'⚠ ':''}{new Date(t.due_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>}
+                  </div>
                 </div>
               </div>
             )
           })}
-          <Link to="/tasks"><button className="btn btn-secondary btn-sm" style={{width:'100%',justifyContent:'center',marginTop:10}}>+ Add Task</button></Link>
+          <Link to="/tasks"><button className="btn btn-secondary btn-sm" style={{width:'100%',justifyContent:'center',marginTop:10}}>View all priorities →</button></Link>
         </div>
       </div>
 

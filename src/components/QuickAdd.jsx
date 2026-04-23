@@ -6,7 +6,7 @@ import { useAssets, useDeals } from '../hooks/useData'
 
 const QUICK_TYPES = [
   { id:'deal', label:'New Deal', icon:'💼', color:'var(--g600)' },
-  { id:'task', label:'New Task', icon:'✅', color:'var(--blue)' },
+  { id:'task', label:'New Priority', icon:'◫', color:'var(--blue)' },
   { id:'valuation', label:'New Valuation', icon:'📊', color:'#7b1fa2' },
   { id:'contact', label:'New Contact', icon:'👤', color:'var(--amber)' },
 ]
@@ -29,10 +29,7 @@ export default function QuickAdd() {
         const { error } = await addDeal({ name: form.name||'New Deal', market: form.market||null, stage: form.stage||'prospecting', ask_price: form.ask_price?parseFloat(form.ask_price):null, cap_rate: form.cap_rate?parseFloat(form.cap_rate):null, type:'hotel', score:50, close_probability:15 })
         if (!error) { setSuccess(true); setTimeout(()=>{ setOpen(false); setType(null); setForm({}); setSuccess(false); navigate('/pipeline') }, 1000) }
       } else if (type === 'task') {
-        let deal_id = null, asset_id = null
-        if (form.deal_id) deal_id = form.deal_id
-        if (form.asset_id) asset_id = form.asset_id
-        const { error } = await supabase.from('tasks').insert({ title: form.title||'New Task', priority: form.priority||'medium', status:'open', due_date: form.due_date||null, deal_id, asset_id })
+        const { error } = await supabase.from('tasks').insert({ item: form.item||'', poc: form.poc||null, status:'Not Started', due_date: form.due_date||null, asset_id: form.asset_id||null })
         if (!error) { setSuccess(true); setTimeout(()=>{ setOpen(false); setType(null); setForm({}); setSuccess(false); navigate('/tasks') }, 1000) }
       } else if (type === 'valuation') {
         const { error } = await supabase.from('valuations').insert({ asset_id: form.asset_id, quarter: parseInt(form.quarter)||1, year: parseInt(form.year)||new Date().getFullYear(), internal_estimate: form.internal_estimate?parseFloat(form.internal_estimate):null, valuation_method:'income', valuation_date: new Date().toISOString().split('T')[0] })
@@ -106,29 +103,17 @@ export default function QuickAdd() {
                 </>)}
 
                 {type === 'task' && (<>
-                  <div className="form-group"><label className="form-label">Task Title *</label><input className="form-input" autoFocus value={form.title||''} onChange={e=>set('title',e.target.value)} placeholder="Follow up with CBRE on Destin deal"/></div>
+                  <div className="form-group"><label className="form-label">Item *</label><input className="form-input" autoFocus value={form.item||''} onChange={e=>set('item',e.target.value)} placeholder="Action item description"/></div>
                   <div className="form-grid-2">
-                    <div className="form-group"><label className="form-label">Priority</label>
-                      <select className="form-select" value={form.priority||'medium'} onChange={e=>set('priority',e.target.value)}>
-                        {['low','medium','high','urgent'].map(p=><option key={p} value={p}>{p.charAt(0).toUpperCase()+p.slice(1)}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group"><label className="form-label">Due Date</label><input className="form-input" type="date" value={form.due_date||''} onChange={e=>set('due_date',e.target.value)}/></div>
-                  </div>
-                  <div className="form-grid-2">
-                    <div className="form-group"><label className="form-label">Link to Asset</label>
+                    <div className="form-group"><label className="form-label">Asset</label>
                       <select className="form-select" value={form.asset_id||''} onChange={e=>set('asset_id',e.target.value)}>
-                        <option value="">None</option>
+                        <option value="">Select asset…</option>
                         {assets.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
                       </select>
                     </div>
-                    <div className="form-group"><label className="form-label">Link to Deal</label>
-                      <select className="form-select" value={form.deal_id||''} onChange={e=>set('deal_id',e.target.value)}>
-                        <option value="">None</option>
-                        {deals.filter(d=>['prospecting','loi','due_diligence','closing'].includes(d.stage)).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-                      </select>
-                    </div>
+                    <div className="form-group"><label className="form-label">POC</label><input className="form-input" value={form.poc||''} onChange={e=>set('poc',e.target.value.toUpperCase())} placeholder="DR"/></div>
                   </div>
+                  <div className="form-group"><label className="form-label">Due Date</label><input className="form-input" type="date" value={form.due_date||''} onChange={e=>set('due_date',e.target.value)}/></div>
                 </>)}
 
                 {type === 'valuation' && (<>
@@ -166,7 +151,7 @@ export default function QuickAdd() {
 
                 <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
                   <button className="btn btn-secondary" onClick={()=>setType(null)}>← Back</button>
-                  <button className="btn btn-primary" onClick={handleSave} disabled={loading||(type==='deal'&&!form.name)||(type==='task'&&!form.title)||(type==='valuation'&&!form.asset_id)||(type==='contact'&&!form.name)}>{loading?'Saving...':'Create'}</button>
+                  <button className="btn btn-primary" onClick={handleSave} disabled={loading||(type==='deal'&&!form.name)||(type==='task'&&!form.item)||(type==='valuation'&&!form.asset_id)||(type==='contact'&&!form.name)}>{loading?'Saving...':'Create'}</button>
                 </div>
               </>
             )}
