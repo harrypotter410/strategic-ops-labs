@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAssets } from '../hooks/useData'
 
@@ -739,6 +739,7 @@ export default function Tasks() {
   const [overdueOnly,     setOverdueOnly]     = useState(false)
   const [fundFilter,      setFundFilter]      = useState(null)
   const [collapsedAssets, setCollapsedAssets] = useState({})
+  const collapsedInitialized = useRef(false)
   const [draggingId,      setDraggingId]      = useState(null)
   const [dragOverId,      setDragOverId]      = useState(null)
   const [assetOrders,     setAssetOrders]     = useState(() => {
@@ -747,6 +748,14 @@ export default function Tasks() {
   })
 
   const loading = tasksLoading || assetsLoading
+
+  // Collapse all assets on first load
+  useEffect(() => {
+    if (assets.length > 0 && !collapsedInitialized.current) {
+      collapsedInitialized.current = true
+      setCollapsedAssets(assets.reduce((acc, a) => ({ ...acc, [a.id]: true }), {}))
+    }
+  }, [assets])
 
   const handleExpandUpdates = (taskId) => {
     if (expandedTask === taskId) { setExpandedTask(null) }
