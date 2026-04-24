@@ -629,7 +629,7 @@ function AssetBlock({
 
         {/* Collapse toggle — takes up remaining space */}
         <div
-          onClick={onToggleCollapse}
+          onClick={() => onToggleCollapse()}
           style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer', userSelect: 'none' }}
         >
           <span style={{ fontSize: 9, color: 'var(--gray400)', flexShrink: 0 }}>
