@@ -526,3 +526,84 @@ html, body { height:100%; font-family:'DM Sans',sans-serif; background:var(--gra
   animation: soul-fade-in 0.35s ease forwards,
              soul-glow 3.5s ease-in-out 3s infinite;
 }
+
+/* ─── PRINT / MEETING MODE ───────────────────────────────── */
+@media print {
+  .topbar, .sidebar, .sidebar-collapse-btn,
+  .export-btn, .bulk-bar, .filter-tabs,
+  .card-action, .btn, .modal-overlay,
+  .offline-banner, .realtime-dot { display: none !important; }
+
+  .app-shell { display: block; height: auto; }
+  .content-area { display: block; }
+  .main { padding: 0; background: #fff !important; }
+  .main::before { display: none; }
+
+  body { background: #fff; color: #000; font-size: 11pt; }
+
+  .card { border: none; border-radius: 0; padding: 0; box-shadow: none; margin-bottom: 24pt; break-inside: avoid; }
+  .card:hover { box-shadow: none; border-color: transparent; transform: none; }
+
+  .kpi-grid { grid-template-columns: repeat(5, 1fr); margin-bottom: 16pt; }
+  .kpi-card { border: 1px solid #ccc; border-radius: 4px; padding: 8pt 10pt; }
+  .kpi-card::before { display: none; }
+  .kpi-card:hover { transform: none; box-shadow: none; }
+
+  .page-header h1 { font-size: 18pt; margin-bottom: 4pt; }
+  .page-header p { font-size: 10pt; color: #666; }
+
+  table { page-break-inside: avoid; }
+  tr { page-break-inside: avoid; }
+
+  /* Show asset blocks expanded in print */
+  [style*="opacity: 0.35"] { opacity: 1 !important; }
+
+  /* Strip backgrounds */
+  [style*="background: rgba"] { background: transparent !important; }
+}
+
+/* ─── MOBILE RESPONSIVE ──────────────────────────────────── */
+@media (max-width: 768px) {
+  :root { --sidebar: 0px; --topbar: 48px; }
+
+  .app-shell { flex-direction: column; }
+  .content-area { flex-direction: column; }
+
+  .sidebar {
+    width: 100% !important;
+    flex-direction: row;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-shrink: 0;
+    height: 48px;
+    align-items: center;
+  }
+  .sidebar .sidebar-label, .sidebar .sidebar-divider,
+  .sidebar .sidebar-collapse-btn, .sidebar .nav-text { display: none; }
+  .sidebar .nav-link { padding: 12px 14px; border-left: none; border-bottom: 2px solid transparent; flex-shrink: 0; }
+  .sidebar .nav-link.active { border-bottom-color: var(--g400); background: var(--g700); }
+  .sidebar .nav-link svg { width: 18px; height: 18px; }
+
+  .main { padding: 14px 16px; }
+
+  .topbar { padding: 0 14px; }
+  .topbar-search { max-width: 160px; margin: 0 10px; }
+  .brand-wordmark { display: none; }
+
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+
+  .kanban { grid-template-columns: 1fr; }
+
+  .grid-2, .grid-3, .form-grid-2 { grid-template-columns: 1fr; }
+
+  /* Tasks page — hide POC column on small screens */
+  .data-table th:nth-child(4),
+  .data-table td:nth-child(4) { display: none; }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .topbar-search { display: none; }
+  .topbar-badge { display: none; }
+}

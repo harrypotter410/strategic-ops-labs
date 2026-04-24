@@ -210,6 +210,39 @@ export default function Overview() {
         </div>
       </div>
 
+      {/* Fund breakdown */}
+      <div className="card">
+        <div className="card-header"><span className="card-title">Portfolio by Fund</span></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          {['KWHP I', 'KWHP II', 'Sotherly', 'Other'].map(fund => {
+            const fa = assets.filter(a => (a.fund || 'Other') === fund && a.status !== 'disposed')
+            if (fa.length === 0) return null
+            const fundVal  = fa.reduce((s, a) => s + (parseFloat(a.current_value) || 0), 0)
+            const fundNOI  = fa.reduce((s, a) => s + (parseFloat(a.noi_trailing) || 0), 0)
+            const fundRooms = fa.reduce((s, a) => s + (a.rooms || 0), 0)
+            const yoc = fundVal && fundNOI ? ((fundNOI / fundVal) * 100).toFixed(1) : null
+            return (
+              <div key={fund} style={{ background: 'var(--gray50)', border: '1px solid var(--gray100)', borderRadius: 8, padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--g900)', marginBottom: 8, fontFamily: "'Playfair Display',serif" }}>{fund}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  {[
+                    ['Assets', fa.length],
+                    ['Rooms', fundRooms.toLocaleString()],
+                    ['Value', fmtM(fundVal)],
+                    ['YOC', yoc ? `${yoc}%` : '—'],
+                  ].map(([l, v]) => (
+                    <div key={l}>
+                      <div style={{ fontSize: 9, color: 'var(--gray500)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{l}</div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--g900)' }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Activity stream */}
       {activity.length>0&&(
         <div className="card">

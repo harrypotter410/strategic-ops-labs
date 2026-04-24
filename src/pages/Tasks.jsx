@@ -3,7 +3,55 @@ import { supabase } from '../lib/supabase'
 import { useAssets } from '../hooks/useData'
 
 const STATUSES   = ['Not Started', 'Ongoing', 'Complete']
-const FUND_ORDER = ['KWHP I', 'KWHP II', 'Other']
+const FUND_ORDER = ['KWHP I', 'KWHP II', 'Sotherly', 'Other']
+
+const TEMPLATES = {
+  'Brand Conversion': [
+    { item: 'Execute franchise agreement', poc: 'BH', days: 14 },
+    { item: 'Submit PIP scope to brand for approval', poc: 'DR', days: 30 },
+    { item: 'Engage GC for renovation bid', poc: 'DR', days: 21 },
+    { item: 'Order FF&E per brand standards', poc: 'DR', days: 45 },
+    { item: 'Notify OTA channels of flag change', poc: 'BH', days: 60 },
+    { item: 'Transition loyalty program integration', poc: 'BH', days: 60 },
+    { item: 'Final brand inspection / punch walk', poc: 'DR', days: 90 },
+  ],
+  'Pre-Opening Checklist': [
+    { item: 'Confirm GM hire', poc: 'BH', days: 14 },
+    { item: 'Finalize soft-opening room block', poc: 'BH', days: 21 },
+    { item: 'Set up PMS and channel manager', poc: 'DR', days: 30 },
+    { item: 'Execute vendor contracts (F&B, laundry, parking)', poc: 'DR', days: 30 },
+    { item: 'Complete staff training program', poc: 'DR', days: 45 },
+    { item: 'Punch list completion sign-off', poc: 'DR', days: 50 },
+    { item: 'Grand opening marketing push', poc: 'BH', days: 60 },
+  ],
+  'Loan Refinance': [
+    { item: 'Engage lender / broker for term sheet', poc: 'BH', days: 14 },
+    { item: 'Deliver trailing 12-month P&L and rent roll', poc: 'DR', days: 21 },
+    { item: 'Order appraisal', poc: 'BH', days: 21 },
+    { item: 'Negotiate and execute term sheet', poc: 'BH', days: 45 },
+    { item: 'Third-party reports (environmental, property condition)', poc: 'DR', days: 45 },
+    { item: 'Loan committee approval', poc: 'BH', days: 60 },
+    { item: 'Closing and fund wiring', poc: 'BH', days: 75 },
+  ],
+  'Disposition Process': [
+    { item: 'Engage broker / run marketing process', poc: 'BH', days: 14 },
+    { item: 'Prepare CIM and data room', poc: 'DR', days: 21 },
+    { item: 'Distribute to buyer pool, set bid deadline', poc: 'BH', days: 30 },
+    { item: 'Evaluate LOIs and select preferred buyer', poc: 'BH', days: 45 },
+    { item: 'Execute PSA', poc: 'BH', days: 52 },
+    { item: 'Support buyer DD process', poc: 'DR', days: 60 },
+    { item: 'Closing / waterfall distribution', poc: 'BH', days: 90 },
+  ],
+  'PIP Management': [
+    { item: 'Receive and review brand PIP document', poc: 'DR', days: 7 },
+    { item: 'Bid scope with 3+ GCs', poc: 'DR', days: 21 },
+    { item: 'Finalize GC and execute contract', poc: 'BH', days: 30 },
+    { item: 'Submit PIP timeline to brand', poc: 'DR', days: 30 },
+    { item: 'Monitor weekly progress vs schedule', poc: 'DR', days: 60 },
+    { item: 'Brand mid-construction inspection', poc: 'DR', days: 75 },
+    { item: 'Final PIP completion sign-off', poc: 'DR', days: 90 },
+  ],
+}
 
 const STATUS_STYLE = {
   'Complete':    { color: '#4a9e6e', bg: 'rgba(74,158,110,0.15)',  border: 'rgba(74,158,110,0.35)' },
@@ -14,6 +62,7 @@ const STATUS_STYLE = {
 const STATUS_GROUP_ORDER = { 'Ongoing': 0, 'Not Started': 1, 'Complete': 2 }
 
 const URGENCY_BORDER = {
+  critical: '#7b0d06',
   overdue:  '#c0392b',
   soon:     '#d4a84b',
   complete: 'rgba(74,158,110,0.4)',
@@ -41,9 +90,25 @@ function urgencyOf(task) {
   if (task.status === 'Complete') return 'complete'
   if (!task.due_date) return 'none'
   const d = daysUntil(task.due_date)
-  if (d < 0) return 'overdue'
-  if (d <= 14) return 'soon'
+  if (d < -30) return 'critical'
+  if (d < 0)   return 'overdue'
+  if (d <= 14)  return 'soon'
   return 'none'
+}
+
+// Render text with @MENTION highlighted
+function MentionText({ text, style }) {
+  if (!text) return null
+  const parts = text.split(/(@[A-Z]{2,6})/g)
+  return (
+    <span style={style}>
+      {parts.map((p, i) =>
+        /^@[A-Z]{2,6}$/.test(p)
+          ? <span key={i} style={{ color: '#4a9e6e', fontWeight: 700 }}>{p}</span>
+          : p
+      )}
+    </span>
+  )
 }
 
 // Sort: Ongoing → Not Started → Complete; within each group: overdue first, then by date asc, no-date last
@@ -79,6 +144,12 @@ function DueBadge({ task }) {
   if (!task.due_date) return <span style={{ fontSize: 11, color: 'var(--gray500)' }}>—</span>
   if (task.status === 'Complete') return <span style={{ fontSize: 11, color: 'var(--gray500)' }}>{dateLabel}</span>
   const d = daysUntil(task.due_date)
+  if (d < -30) return (
+    <span>
+      <span style={{ display: 'block', fontSize: 11, color: '#7b0d06', fontWeight: 700, lineHeight: 1.3 }}>{dateLabel}</span>
+      <span style={{ display: 'block', fontSize: 9, color: '#7b0d06', fontWeight: 700, letterSpacing: '.03em' }}>{Math.abs(d)}d — CRITICAL</span>
+    </span>
+  )
   if (d < 0) return (
     <span>
       <span style={{ display: 'block', fontSize: 11, color: '#c0392b', fontWeight: 600, lineHeight: 1.3 }}>{dateLabel}</span>
@@ -303,7 +374,7 @@ function UpdatesPanel({ task, updates, onAdd, onClose }) {
                     {u.poc && <span style={{ fontSize: 10, fontWeight: 700, color: '#4a9e6e' }}>{u.poc}</span>}
                     <span style={{ fontSize: 10, color: 'var(--gray500)' }}>{fmtDateTime(u.created_at)}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--g900)' }}>{u.note}</div>
+                  <MentionText text={u.note} style={{ fontSize: 11, color: 'var(--g900)', display: 'block' }} />
                 </div>
               ))}
             </div>
@@ -330,18 +401,33 @@ function UpdatesPanel({ task, updates, onAdd, onClose }) {
 
 // ── Task row ──────────────────────────────────────────────────────────────────
 
-function TaskRow({ task, updates, onSave, onDelete, onExpandUpdates, onAddUpdate, updatesOpen }) {
-  const [editing, setEditing]     = useState(false)
-  const [form, setForm]           = useState({ ...task })
-  const [hovered, setHovered]     = useState(false)
-  const [saveError, setSaveError] = useState('')
+function TaskRow({ task, updates, onSave, onDelete, onExpandUpdates, onAddUpdate, updatesOpen, selected, onSelect }) {
+  const [editing, setEditing]         = useState(false)
+  const [form, setForm]               = useState({ ...task })
+  const [hovered, setHovered]         = useState(false)
+  const [saveError, setSaveError]     = useState('')
+  const [ongoingNote, setOngoingNote] = useState('')
+  const [showNotePrompt, setShowNotePrompt] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const urgency     = urgencyOf(task)
   const isComplete  = task.status === 'Complete'
   const updateCount = updates?.length || 0
 
-  const handleStatusChange = async (newStatus) => { await onSave({ ...task, status: newStatus }) }
+  const handleStatusChange = async (newStatus) => {
+    if (newStatus === 'Ongoing' && task.status !== 'Ongoing') {
+      setShowNotePrompt(true)
+      return
+    }
+    await onSave({ ...task, status: newStatus })
+  }
+
+  const handleOngoingConfirm = async () => {
+    await onSave({ ...task, status: 'Ongoing', update_notes: ongoingNote || task.update_notes })
+    if (ongoingNote.trim()) await onAddUpdate(task.id, ongoingNote, task.poc)
+    setShowNotePrompt(false)
+    setOngoingNote('')
+  }
   const handleSave = async () => {
     setSaveError('')
     const { error } = await onSave({ ...form, id: task.id })
@@ -391,18 +477,40 @@ function TaskRow({ task, updates, onSave, onDelete, onExpandUpdates, onAddUpdate
     )
   }
 
+  const rowBg = urgency === 'critical' ? 'rgba(123,13,6,0.04)'
+    : urgency === 'overdue' ? 'rgba(192,57,43,0.02)'
+    : updatesOpen ? 'rgba(74,158,110,0.03)'
+    : hovered ? 'rgba(74,158,110,0.025)'
+    : 'transparent'
+
+  const itemColor = isComplete ? 'var(--gray500)'
+    : urgency === 'critical' ? '#7b0d06'
+    : urgency === 'overdue' ? '#c0392b'
+    : 'var(--g900)'
+
   return (
     <>
+      {showNotePrompt && (
+        <tr style={{ background: 'rgba(212,168,75,0.06)' }}>
+          <td colSpan={7} style={{ padding: '8px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: '#d4a84b', fontWeight: 600, flexShrink: 0 }}>Update note (required to mark Ongoing):</span>
+              <input className="form-input" value={ongoingNote} onChange={e => setOngoingNote(e.target.value)}
+                placeholder="What's the current status? @DR coordinating with brand…"
+                style={{ padding: '3px 8px', fontSize: 11, flex: 1 }} autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') handleOngoingConfirm(); if (e.key === 'Escape') setShowNotePrompt(false) }} />
+              <button className="btn btn-primary btn-sm" onClick={handleOngoingConfirm} style={{ fontSize: 10, flexShrink: 0 }}>Confirm</button>
+              <button className="btn btn-sm" onClick={() => setShowNotePrompt(false)} style={{ fontSize: 10 }}>Cancel</button>
+            </div>
+          </td>
+        </tr>
+      )}
       <tr
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
           borderBottom: updatesOpen ? 'none' : '1px solid rgba(74,158,110,0.07)',
-          background: urgency === 'overdue'
-            ? 'rgba(192,57,43,0.02)'
-            : updatesOpen ? 'rgba(74,158,110,0.03)'
-            : hovered ? 'rgba(74,158,110,0.025)'
-            : 'transparent',
+          background: rowBg,
           transition: 'background 0.1s',
           opacity: isComplete ? 0.5 : 1,
         }}
@@ -412,7 +520,11 @@ function TaskRow({ task, updates, onSave, onDelete, onExpandUpdates, onAddUpdate
 
         {/* Timeline */}
         <td style={tdSt}>
-          <DueBadge task={task} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <input type="checkbox" className="row-checkbox" checked={!!selected}
+              onChange={e => { e.stopPropagation(); onSelect(task.id, e.target.checked) }} />
+            <DueBadge task={task} />
+          </div>
         </td>
 
         {/* Item */}
@@ -420,7 +532,7 @@ function TaskRow({ task, updates, onSave, onDelete, onExpandUpdates, onAddUpdate
           <span style={{
             display: 'block',
             fontSize: 12,
-            color: isComplete ? 'var(--gray500)' : urgency === 'overdue' ? '#c0392b' : 'var(--g900)',
+            color: itemColor,
             textDecoration: isComplete ? 'line-through' : 'none',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
@@ -443,12 +555,10 @@ function TaskRow({ task, updates, onSave, onDelete, onExpandUpdates, onAddUpdate
         {/* Update / notes */}
         <td style={{ ...tdSt, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{
+            <MentionText text={task.update_notes} style={{
               fontSize: 11, color: 'var(--gray500)', flex: 1,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {task.update_notes}
-            </span>
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block',
+            }} />
             <button
               onClick={() => onExpandUpdates(task.id)}
               style={{
@@ -545,6 +655,113 @@ function AddTaskRow({ assetId, onSave, onCancel }) {
   )
 }
 
+// ── Bulk action bar ───────────────────────────────────────────────────────────
+
+function BulkBar({ count, onMarkStatus, onClear }) {
+  return (
+    <div className="bulk-bar" style={{ marginBottom: 16 }}>
+      <span style={{ fontWeight: 600 }}>{count} selected</span>
+      <button className="btn btn-sm" onClick={() => onMarkStatus('Complete')}
+        style={{ background: 'rgba(74,158,110,0.3)', color: '#a8d5bc', border: 'none' }}>
+        Mark Complete
+      </button>
+      <button className="btn btn-sm" onClick={() => onMarkStatus('Ongoing')}
+        style={{ background: 'rgba(212,168,75,0.3)', color: '#d4a84b', border: 'none' }}>
+        Mark Ongoing
+      </button>
+      <button className="btn btn-sm" onClick={() => onMarkStatus('Not Started')}
+        style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none' }}>
+        Mark Not Started
+      </button>
+      <button onClick={onClear} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 13 }}>✕</button>
+    </div>
+  )
+}
+
+// ── Template modal ────────────────────────────────────────────────────────────
+
+function TemplateModal({ assets, onApply, onClose }) {
+  const [selectedAsset, setSelectedAsset]     = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState('')
+  const [applying, setApplying]               = useState(false)
+
+  const handleApply = async () => {
+    if (!selectedAsset || !selectedTemplate) return
+    setApplying(true)
+    const today = new Date()
+    const tasks = TEMPLATES[selectedTemplate].map(t => {
+      const due = new Date(today)
+      due.setDate(due.getDate() + t.days)
+      return {
+        asset_id: selectedAsset,
+        item: t.item,
+        poc: t.poc,
+        due_date: due.toISOString().split('T')[0],
+        status: 'Not Started',
+      }
+    })
+    await onApply(tasks)
+    setApplying(false)
+    onClose()
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ width: 480 }}>
+        <div className="modal-header">
+          <span className="modal-title">Apply Playbook</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Select Property</label>
+          <select className="form-select" value={selectedAsset} onChange={e => setSelectedAsset(e.target.value)}>
+            <option value="">— choose asset —</option>
+            {assets.filter(a => a.status !== 'disposed').map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Select Playbook</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {Object.keys(TEMPLATES).map(name => (
+              <div key={name}
+                onClick={() => setSelectedTemplate(name)}
+                style={{
+                  padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                  border: `1px solid ${selectedTemplate === name ? '#4a9e6e' : 'var(--gray200)'}`,
+                  background: selectedTemplate === name ? 'rgba(74,158,110,0.07)' : '#fff',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g900)', marginBottom: 2 }}>{name}</div>
+                <div style={{ fontSize: 10, color: 'var(--gray500)' }}>{TEMPLATES[name].length} tasks · up to {Math.max(...TEMPLATES[name].map(t => t.days))}d timeline</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {selectedTemplate && (
+          <div style={{ background: 'var(--gray50)', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#4a9e6e', letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 6 }}>Tasks to be created</div>
+            {TEMPLATES[selectedTemplate].map((t, i) => (
+              <div key={i} style={{ fontSize: 11, color: 'var(--gray700)', padding: '3px 0', borderBottom: '1px solid var(--gray100)', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{t.item}</span>
+                <span style={{ color: 'var(--gray500)', flexShrink: 0, marginLeft: 12 }}>{t.poc} · Day {t.days}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={handleApply}
+            disabled={!selectedAsset || !selectedTemplate || applying}>
+            {applying ? 'Creating…' : `Create ${selectedTemplate ? TEMPLATES[selectedTemplate].length : ''} Tasks`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Drag handle icon ──────────────────────────────────────────────────────────
 
 function GripIcon() {
@@ -568,6 +785,7 @@ function AssetBlock({
   collapsed, onToggleCollapse,
   isDragging, isDragOver,
   onDragStart, onDragEnd, onDragOver, onDrop,
+  selectedTasks, onSelect,
 }) {
   const [addingRow, setAddingRow] = useState(false)
 
@@ -715,6 +933,8 @@ function AssetBlock({
                   onExpandUpdates={onExpandUpdates}
                   onAddUpdate={onAddUpdate}
                   updatesOpen={expandedTask === g.task.id}
+                  selected={selectedTasks?.has(g.task.id)}
+                  onSelect={onSelect}
                 />
               )
             )}
@@ -848,12 +1068,59 @@ export default function Tasks() {
     handleDragEnd()
   }
 
+  // ── Bulk selection ──────────────────────────────────────────────────────────
+
+  const [selectedTasks, setSelectedTasks] = useState(new Set())
+  const [byPersonView,  setByPersonView]  = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
+
+  const handleSelect = (taskId, checked) => {
+    setSelectedTasks(prev => {
+      const next = new Set(prev)
+      checked ? next.add(taskId) : next.delete(taskId)
+      return next
+    })
+  }
+
+  const handleBulkStatus = async (status) => {
+    await Promise.all([...selectedTasks].map(id => upsert({ id, status })))
+    setSelectedTasks(new Set())
+  }
+
+  const handleApplyTemplate = async (taskList) => {
+    for (const t of taskList) await upsert(t)
+  }
+
   // ── KPI counts ──────────────────────────────────────────────────────────────
 
-  const overdue    = kpiTasks.filter(t => urgencyOf(t) === 'overdue').length
-  const notStarted = kpiTasks.filter(t => t.status === 'Not Started').length
-  const ongoing    = kpiTasks.filter(t => t.status === 'Ongoing').length
-  const complete   = kpiTasks.filter(t => t.status === 'Complete').length
+  const overdueCount  = kpiTasks.filter(t => ['overdue','critical'].includes(urgencyOf(t))).length
+  const notStarted    = kpiTasks.filter(t => t.status === 'Not Started').length
+  const ongoing       = kpiTasks.filter(t => t.status === 'Ongoing').length
+  const complete      = kpiTasks.filter(t => t.status === 'Complete').length
+  const criticalCount = kpiTasks.filter(t => urgencyOf(t) === 'critical').length
+
+  // ── POC view data ────────────────────────────────────────────────────────────
+
+  const pocGroups = useMemo(() => {
+    const visibleTasks = tasks.filter(t => {
+      if (overdueOnly && !['overdue','critical'].includes(urgencyOf(t))) return false
+      if (hideComplete && t.status === 'Complete') return false
+      if (fundFilter) {
+        const fundAssetIds = new Set((assetsByFund[fundFilter] || []).map(a => a.id))
+        if (!fundAssetIds.has(t.asset_id)) return false
+      }
+      return true
+    })
+    const byPoc = {}
+    visibleTasks.forEach(t => {
+      const poc = t.poc || 'Unassigned'
+      if (!byPoc[poc]) byPoc[poc] = []
+      byPoc[poc].push(t)
+    })
+    return Object.entries(byPoc).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [tasks, overdueOnly, hideComplete, fundFilter, assetsByFund])
+
+  const assetMap = useMemo(() => assets.reduce((acc, a) => ({ ...acc, [a.id]: a }), {}), [assets])
 
   if (loading) return <div className="loading">Loading…</div>
 
@@ -869,23 +1136,26 @@ export default function Tasks() {
           <h1 className="page-title">30.60.90 Priorities</h1>
           <p className="page-subtitle">{getQuarter()} · As of {nowDate}</p>
         </div>
-        <button
-          className="export-btn"
-          onClick={() => window.print()}
-          style={{ marginTop: 2, flexShrink: 0 }}
-        >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1zM5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1zM5 5V1.5a.5.5 0 0 0-.5-.5h-2A.5.5 0 0 0 2 1.5V5H1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1v1.5a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V14h1a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H5zm1 0V2h4v3H6zm4 1v3H6V6h4zM3 2h1v3H3V2zm-1 9V6h12v5H2zm3-2H5v1h2v-1zm1 0h2v1H8v-1zm3 0h-1v1h1v-1z"/>
-          </svg>
-          Print
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-sm" onClick={() => setShowTemplates(true)}
+            style={{ fontSize: 10, background: 'rgba(74,158,110,0.08)', border: '1px solid rgba(74,158,110,0.25)', color: '#4a9e6e' }}>
+            Playbooks
+          </button>
+          <button className="export-btn" onClick={() => window.print()} style={{ marginTop: 0 }}>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1zM5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1zM5 5V1.5a.5.5 0 0 0-.5-.5h-2A.5.5 0 0 0 2 1.5V5H1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1v1.5a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V14h1a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H5zm1 0V2h4v3H6zm4 1v3H6V6h4zM3 2h1v3H3V2zm-1 9V6h12v5H2zm3-2H5v1h2v-1zm1 0h2v1H8v-1zm3 0h-1v1h1v-1z"/>
+            </svg>
+            Print
+          </button>
+        </div>
       </div>
 
       {/* KPI strip */}
       <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-        <div className="kpi-card" style={{ borderTop: overdue > 0 ? '3px solid #c0392b' : '3px solid transparent' }}>
+        <div className="kpi-card" style={{ borderTop: criticalCount > 0 ? '3px solid #7b0d06' : overdueCount > 0 ? '3px solid #c0392b' : '3px solid transparent' }}>
           <div className="kpi-label">Overdue</div>
-          <div className="kpi-value" style={{ color: overdue > 0 ? '#c0392b' : 'var(--g900)' }}>{overdue}</div>
+          <div className="kpi-value" style={{ color: criticalCount > 0 ? '#7b0d06' : overdueCount > 0 ? '#c0392b' : 'var(--g900)' }}>{overdueCount}</div>
+          {criticalCount > 0 && <div style={{ fontSize: 9, color: '#7b0d06', fontWeight: 700, letterSpacing: '.04em' }}>{criticalCount} CRITICAL</div>}
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Not Started</div>
@@ -904,6 +1174,11 @@ export default function Tasks() {
           <div className="kpi-value">{kpiTasks.length}</div>
         </div>
       </div>
+
+      {/* Bulk bar */}
+      {selectedTasks.size > 0 && (
+        <BulkBar count={selectedTasks.size} onMarkStatus={handleBulkStatus} onClear={() => setSelectedTasks(new Set())} />
+      )}
 
       {/* Filter bar */}
       <div style={{
@@ -943,9 +1218,77 @@ export default function Tasks() {
         }}>
           {hideComplete ? 'Active only' : 'Hide complete'}
         </button>
+
+        <button onClick={() => setByPersonView(v => !v)} style={{
+          padding: '3px 13px', fontSize: 11, fontWeight: 600, borderRadius: 20,
+          border: '1px solid rgba(74,158,110,0.3)',
+          background: byPersonView ? '#4a9e6e' : 'transparent',
+          color: byPersonView ? '#fff' : '#4a9e6e',
+          cursor: 'pointer', transition: 'all 0.15s', marginLeft: 'auto',
+        }}>
+          {byPersonView ? 'By Property' : 'By Person'}
+        </button>
       </div>
 
-      {!hasFundAssets ? (
+      {/* Template modal */}
+      {showTemplates && (
+        <TemplateModal assets={assets} onApply={handleApplyTemplate} onClose={() => setShowTemplates(false)} />
+      )}
+
+      {/* ── By-Person view ─────────────────────────────────────────────────────── */}
+      {byPersonView ? (
+        <div>
+          {pocGroups.length === 0 ? (
+            <div className="card"><div className="empty-state"><div className="empty-state-title">No tasks match current filters</div></div></div>
+          ) : pocGroups.map(([poc, pocTasks]) => {
+            const sorted = sortTasks(pocTasks)
+            const pocOverdue = pocTasks.filter(t => ['overdue','critical'].includes(urgencyOf(t))).length
+            return (
+              <div key={poc} className="card" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid rgba(74,158,110,0.15)' }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--g900)', fontFamily: "'Playfair Display',serif" }}>{poc}</span>
+                  <span style={{ fontSize: 10, color: 'var(--gray500)' }}>{pocTasks.length} tasks</span>
+                  {pocOverdue > 0 && <span style={{ fontSize: 9, fontWeight: 700, color: '#c0392b', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', padding: '2px 7px', borderRadius: 10 }}>{pocOverdue} overdue</span>}
+                  <div style={{ marginLeft: 'auto', width: 160 }}><ProgressBar complete={pocTasks.filter(t => t.status === 'Complete').length} total={pocTasks.length} /></div>
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                  <TableCols />
+                  <thead>
+                    <tr>
+                      <th style={{ ...thSt, padding: 0, border: 'none', width: 3 }} />
+                      <th style={{ ...thSt }}>Due</th>
+                      <th style={{ ...thSt }}>Action Item · Property</th>
+                      <th style={{ ...thSt, textAlign: 'center' }}>POC</th>
+                      <th style={{ ...thSt }}>Status</th>
+                      <th style={{ ...thSt }}>Latest Update</th>
+                      <th style={{ ...thSt, width: 72 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sorted.map(t => {
+                      const asset = assetMap[t.asset_id]
+                      return (
+                        <TaskRow
+                          key={t.id}
+                          task={{ ...t, item: asset ? `${t.item} · ${asset.name}` : t.item }}
+                          updates={updatesByTask[t.id]}
+                          onSave={upsert}
+                          onDelete={remove}
+                          onExpandUpdates={handleExpandUpdates}
+                          onAddUpdate={handleAddUpdate}
+                          updatesOpen={expandedTask === t.id}
+                          selected={selectedTasks.has(t.id)}
+                          onSelect={handleSelect}
+                        />
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+        </div>
+      ) : !hasFundAssets ? (
         <div className="card">
           <div className="empty-state">
             <div className="empty-state-title">Assign assets to a fund to get started</div>
@@ -959,7 +1302,7 @@ export default function Tasks() {
 
           const fundTaskList = fundAssets.flatMap(a => tasksByAsset[a.id] || [])
           const fundComplete = fundTaskList.filter(t => t.status === 'Complete').length
-          const fundOverdue  = fundTaskList.filter(t => urgencyOf(t) === 'overdue').length
+          const fundOverdue  = fundTaskList.filter(t => ['overdue','critical'].includes(urgencyOf(t))).length
 
           const allCollapsed = fundAssets.every(a => !!collapsedAssets[a.id])
 
@@ -1025,6 +1368,8 @@ export default function Tasks() {
                     onDragEnd={handleDragEnd}
                     onDragOver={handleDragOver}
                     onDrop={(e, targetId) => handleDrop(e, targetId, fund)}
+                    selectedTasks={selectedTasks}
+                    onSelect={handleSelect}
                   />
                 )
               })}
