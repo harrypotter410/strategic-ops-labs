@@ -18,7 +18,6 @@ import Tasks from './pages/Tasks'
 import DebtTracker from './pages/DebtTracker'
 import Contacts from './pages/Contacts'
 import IRRDashboard from './pages/IRRDashboard'
-import BudgetVsActual from './pages/BudgetVsActual'
 import KeyDates from './pages/KeyDates'
 import Import from './pages/Import'
 import Integrations from './pages/Integrations'
@@ -53,7 +52,6 @@ export default function App() {
           <Route path="/valuations" element={<ProtectedRoute><Valuations/></ProtectedRoute>}/>
           <Route path="/debt" element={<ProtectedRoute><DebtTracker/></ProtectedRoute>}/>
           <Route path="/irr" element={<ProtectedRoute><IRRDashboard/></ProtectedRoute>}/>
-          <Route path="/budget" element={<ProtectedRoute><BudgetVsActual/></ProtectedRoute>}/>
           <Route path="/key-dates" element={<ProtectedRoute><KeyDates/></ProtectedRoute>}/>
           <Route path="/pipeline" element={<ProtectedRoute><Pipeline/></ProtectedRoute>}/>
           <Route path="/deals/:id" element={<ProtectedRoute><DealDetail/></ProtectedRoute>}/>
